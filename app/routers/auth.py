@@ -1,66 +1,84 @@
+"""Authentication router with login, registration, and user info endpoints."""
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from app import models, schemas, auth
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from app import models, schemas
+from app.auth import get_user_by_username, get_user_by_email, get_password_hash, authenticate_user, create_access_token, get_current_user
 from app.database import get_db
 from app.config import settings
+from app.logging_config import get_logger
+from app.exceptions import UserAlreadyExistsError, InvalidCredentialsError
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/auth", tags=["authentication"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
-def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    """Register a new user with 10 starting points"""
-    # Check if username already exists
-    db_user = auth.get_user_by_username(db, username=user.username)
-    if db_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already registered"
-        )
+@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+def register(request: Request, user: schemas.UserCreate, db: Session = Depends(get_db)):
+    """Register a new user with 10 starting points."""
+    if get_user_by_username(db, username=user.username):
+        raise UserAlreadyExistsError("username", user.username)
+    if get_user_by_email(db, email=user.email):
+        raise UserAlreadyExistsError("email", user.email)
     
-    # Check if email already exists
-    db_user = auth.get_user_by_email(db, email=user.email)
-    if db_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
-    
-    # Create new user with 10 starting points
-    hashed_password = auth.get_password_hash(user.password)
     db_user = models.User(
         username=user.username,
         email=user.email,
-        hashed_password=hashed_password,
-        points=10.0  # Start with 10 points
+        hashed_password=get_password_hash(user.password),
+        points=10
     )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+    
+    logger.info(f"New user registered: {user.username}")
     return db_user
 
 
 @router.post("/login", response_model=schemas.Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    """Login and get access token"""
-    user = auth.authenticate_user(db, form_data.username, form_data.password)
+@limiter.limit(f"{settings.RATE_LIMIT_LOGIN_PER_MINUTE}/minute")
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """Login and get access token."""
+    user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = auth.create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        logger.warning(f"Failed login attempt for: {form_data.username}")
+        raise InvalidCredentialsError()
+    
+    access_token = create_access_token(
+        data={"sub": user.username},
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
+    
+    logger.info(f"User logged in: {user.username}")
     return {"access_token": access_token, "token_type": "bearer"}
 
 
 @router.get("/me", response_model=schemas.UserResponse)
-def read_users_me(current_user: models.User = Depends(auth.get_current_user)):
-    """Get current user information"""
+@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+def read_users_me(request: Request, current_user: models.User = Depends(get_current_user)):
+    """Get current user information."""
     return current_user
 
+
+@router.get("/user/{username}", response_model=schemas.UserResponse)
+@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+def get_user_profile(request: Request, username: str, db: Session = Depends(get_db)):
+    """Get public user profile by username."""
+    user = get_user_by_username(db, username)
+    if not user:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@router.get("/stats/count")
+@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+def get_user_count(request: Request, db: Session = Depends(get_db)):
+    """Get total registered user count."""
+    count = db.query(models.User).count()
+    return {"count": count}
