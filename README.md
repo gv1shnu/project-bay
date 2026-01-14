@@ -38,26 +38,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 DATABASE_URL=sqlite:///./betting.db
 ```
 
-### 3. Seed Sample Data (Optional)
-
-To populate the database with sample bets for showcase purposes:
-
-```bash
-python seed_data.py
-```
-
-This will create:
-- 10 sample users with usernames like `fitness_fanatic`, `bookworm_reader`, `code_master`, etc.
-- 20 sample bets with various commitment descriptions
-- Each user starts with 100 points
-- Default password for all sample users: `password123`
-
-**Note**: 
-- The seed script will skip creating bets if bets already exist in the database
-- To reset and reseed, delete the `betting.db` file and run the script again
-- Sample users can be logged in with their username and password `password123`
-
-### 4. Run the Application
+### 3.  Run the Application
 
 ```bash
 uvicorn app.main:app --reload
@@ -200,6 +181,14 @@ This backend is integrated with the `bay-frontend` React application. The fronte
 3. The frontend will be available at `http://localhost:5173` and will automatically connect to the backend API.
 
 
-### Screenshot
+## Future Additions
 
-![](ss.png)
+- [ ] win/loss decision maker
+- [ ] sort the feed by likes
+- [ ] friends network
+- [ ] authentication (login/signup)
+- [ ] configuring AI as judge
+- [ ] Recommendation system
+- [ ] Adding web3 wallet to profile
+- [ ] Abuse prevention
+
