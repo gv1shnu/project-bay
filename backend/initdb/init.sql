@@ -1,0 +1,1 @@
+CREATE DATABASE betting_test_db;

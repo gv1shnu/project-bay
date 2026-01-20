@@ -1,0 +1,316 @@
+import { useState, useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
+import { apiService } from '../services/api'
+import { Bet } from '../types'
+import { getAvatarUrl } from '../utils/avatar'
+import CreateBetModal from '../components/CreateBetModal'
+import AuthPrompt from '../components/AuthPrompt'
+
+export default function ProfilePage() {
+    const { username } = useParams<{ username: string }>()
+    const { user } = useAuth()
+    const navigate = useNavigate()
+    const [userBets, setUserBets] = useState<Bet[]>([])
+    const [userChallenges, setUserChallenges] = useState<{ bet: Bet, challenge: { id: number, amount: number, status: string, created_at: string } }[]>([])
+    const [loading, setLoading] = useState(true)
+    const [createdStats, setCreatedStats] = useState({ total: 0, won: 0, lost: 0, active: 0 })
+    const [challengedStats, setChallengedStats] = useState({ total: 0, won: 0, lost: 0, pending: 0 })
+    const [profileUser, setProfileUser] = useState<{ points: number; created_at: string } | null>(null)
+    const [showCreateBet, setShowCreateBet] = useState(false)
+    const [showAuthPrompt, setShowAuthPrompt] = useState(false)
+
+    const isOwnProfile = user?.username === username
+
+    useEffect(() => {
+        fetchUserData()
+    }, [username])
+
+    const fetchUserData = async () => {
+        setLoading(true)
+
+        // Fetch user profile to get points
+        if (username) {
+            const profileResponse = await apiService.getUserProfile(username)
+            if (profileResponse.data) {
+                setProfileUser({
+                    points: profileResponse.data.points,
+                    created_at: profileResponse.data.created_at
+                })
+            }
+        }
+
+        // Fetch bets
+        const response = await apiService.getPublicBets()
+        if (response.data) {
+            // Bets this user created
+            const createdBets = response.data.filter((bet: Bet) => bet.username === username)
+            setUserBets(createdBets)
+
+            setCreatedStats({
+                total: createdBets.length,
+                won: createdBets.filter((b: Bet) => b.status === 'won').length,
+                lost: createdBets.filter((b: Bet) => b.status === 'lost').length,
+                active: createdBets.filter((b: Bet) => b.status === 'active').length
+            })
+
+            // Challenges this user made
+            const challengesList: { bet: Bet, challenge: { id: number, amount: number, status: string, created_at: string } }[] = []
+            let challengeTotal = 0, challengeWon = 0, challengeLost = 0, challengePending = 0
+            response.data.forEach((bet: Bet) => {
+                if (bet.challenges) {
+                    bet.challenges.filter(c => c.challenger_username === username).forEach(c => {
+                        challengesList.push({ bet, challenge: { id: c.id, amount: c.amount, status: c.status, created_at: c.created_at } })
+                        challengeTotal++
+                        if (c.status === 'accepted') {
+                            // Bet resolved - check outcome (challenger wins when bet LOST)
+                            if (bet.status === 'lost') challengeWon++
+                            else if (bet.status === 'won') challengeLost++
+                            else challengePending++
+                        } else if (c.status === 'pending') {
+                            challengePending++
+                        }
+                    })
+                }
+            })
+            setUserChallenges(challengesList)
+
+            setChallengedStats({
+                total: challengeTotal,
+                won: challengeWon,
+                lost: challengeLost,
+                pending: challengePending
+            })
+        }
+        setLoading(false)
+    }
+
+    const getStatusColor = (status: string) => {
+        switch (status) {
+            case 'won': return 'bg-green-100 text-green-700'
+            case 'lost': return 'bg-red-100 text-red-700'
+            case 'cancelled': return 'bg-gray-100 text-gray-700'
+            default: return 'bg-yellow-100 text-yellow-700'
+        }
+    }
+
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-competitive-light/20 via-white to-friendly-light/20">
+            <div className="container mx-auto px-4 py-8 max-w-4xl">
+                {/* Back Button */}
+                <button
+                    onClick={() => navigate('/')}
+                    className="mb-6 flex items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    Back to Feed
+                </button>
+
+                {/* Profile Header */}
+                <div className="bg-white rounded-2xl shadow-lg p-8 mb-8">
+                    <div className="flex flex-col md:flex-row items-center gap-6">
+                        <img
+                            src={getAvatarUrl(username || '')}
+                            alt={`${username}'s avatar`}
+                            className="w-32 h-32 rounded-full border-4 border-competitive-light shadow-lg"
+                        />
+                        <div className="text-center md:text-left flex-1">
+                            <h1 className="text-3xl font-bold text-gray-800 mb-2">@{username}</h1>
+                            {profileUser && (
+                                <div className="mb-4">
+                                    <p className="text-xl text-competitive-dark font-semibold">
+                                        {profileUser.points} points
+                                    </p>
+                                    <p className="text-sm text-gray-500">
+                                        Joined {new Date(profileUser.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                                    </p>
+                                </div>
+                            )}
+                            {/* Created Bets Row */}
+                            <div className="mb-4">
+                                <p className="text-sm font-semibold text-gray-600 mb-2">Bets Created</p>
+                                <div className="flex flex-wrap justify-center md:justify-start gap-3">
+                                    <div className="bg-gray-100 rounded-lg px-3 py-2">
+                                        <p className="text-xl font-bold text-gray-800">{createdStats.total}</p>
+                                        <p className="text-xs text-gray-500 uppercase">Total</p>
+                                    </div>
+                                    <div className="bg-green-50 rounded-lg px-3 py-2">
+                                        <p className="text-xl font-bold text-green-600">{createdStats.won}</p>
+                                        <p className="text-xs text-green-500 uppercase">Won</p>
+                                    </div>
+                                    <div className="bg-red-50 rounded-lg px-3 py-2">
+                                        <p className="text-xl font-bold text-red-600">{createdStats.lost}</p>
+                                        <p className="text-xs text-red-500 uppercase">Lost</p>
+                                    </div>
+                                    <div className="bg-yellow-50 rounded-lg px-3 py-2">
+                                        <p className="text-xl font-bold text-yellow-600">{createdStats.active}</p>
+                                        <p className="text-xs text-yellow-500 uppercase">Active</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Challenged Bets Row */}
+                            <div>
+                                <p className="text-sm font-semibold text-gray-600 mb-2">Bets Challenged</p>
+                                <div className="flex flex-wrap justify-center md:justify-start gap-3">
+                                    <div className="bg-purple-50 rounded-lg px-3 py-2">
+                                        <p className="text-xl font-bold text-purple-600">{challengedStats.total}</p>
+                                        <p className="text-xs text-purple-500 uppercase">Total</p>
+                                    </div>
+                                    <div className="bg-green-50 rounded-lg px-3 py-2">
+                                        <p className="text-xl font-bold text-green-600">{challengedStats.won}</p>
+                                        <p className="text-xs text-green-500 uppercase">Won</p>
+                                    </div>
+                                    <div className="bg-red-50 rounded-lg px-3 py-2">
+                                        <p className="text-xl font-bold text-red-600">{challengedStats.lost}</p>
+                                        <p className="text-xs text-red-500 uppercase">Lost</p>
+                                    </div>
+                                    <div className="bg-blue-50 rounded-lg px-3 py-2">
+                                        <p className="text-xl font-bold text-blue-600">{challengedStats.pending}</p>
+                                        <p className="text-xs text-blue-500 uppercase">Pending</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Add Friend Section - Right Side */}
+                        {!isOwnProfile && user && (
+                            <div className="text-center">
+                                <button
+                                    onClick={() => alert('Friend feature coming soon!')}
+                                    className="px-6 py-3 bg-gradient-to-r from-friendly-dark to-friendly-DEFAULT text-white rounded-lg font-semibold hover:from-friendly-DEFAULT hover:to-friendly-light transition-all shadow-md hover:shadow-lg"
+                                >
+                                    Add Friend
+                                </button>
+                                <p className="text-sm text-gray-500 mt-2">0 friends</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Bets Section */}
+                <div className="bg-white rounded-2xl shadow-lg p-6">
+                    <h2 className="text-xl font-bold text-gray-800 mb-6">
+                        {isOwnProfile ? 'Your Bets' : `${username}'s Bets`}
+                    </h2>
+
+                    {loading ? (
+                        <div className="text-center py-12">
+                            <p className="text-gray-500">Loading bets...</p>
+                        </div>
+                    ) : userBets.length === 0 ? (
+                        <div className="text-center py-12">
+                            <p className="text-gray-500">No bets yet.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {userBets.map((bet) => (
+                                <div
+                                    key={bet.id}
+                                    className="border border-gray-100 rounded-xl p-4 hover:shadow-md transition-shadow"
+                                >
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h3 className="font-semibold text-gray-800">{bet.title}</h3>
+                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(bet.status)}`}>
+                                            {bet.status.toUpperCase()}
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-gray-600 mb-2">{bet.criteria}</p>
+                                    <div className="flex justify-between text-sm text-gray-500">
+                                        <div className="flex gap-4">
+                                            <span className="font-semibold text-gray-600">
+                                                Your stake: {bet.amount} pts
+                                            </span>
+                                            <span className="font-semibold text-competitive-dark">
+                                                Total: {bet.amount + (bet.challenges?.filter(c => c.status !== 'rejected').reduce((sum, c) => sum + c.amount, 0) || 0)} pts
+                                                {bet.status === 'won' && <span className="text-green-600 ml-1">(+{bet.challenges?.filter(c => c.status === 'accepted').reduce((sum, c) => sum + c.amount, 0) || 0})</span>}
+                                                {bet.status === 'lost' && <span className="text-red-600 ml-1">(-{bet.amount})</span>}
+                                            </span>
+                                        </div>
+                                        <span>{new Date(bet.created_at).toLocaleDateString()}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Challenges Section */}
+                <div className="bg-white rounded-2xl shadow-lg p-6 mt-6">
+                    <h2 className="text-xl font-bold text-gray-800 mb-6">
+                        {isOwnProfile ? 'Your Challenges' : `${username}'s Challenges`}
+                    </h2>
+
+                    {loading ? (
+                        <div className="text-center py-12">
+                            <p className="text-gray-500">Loading challenges...</p>
+                        </div>
+                    ) : userChallenges.length === 0 ? (
+                        <div className="text-center py-12">
+                            <p className="text-gray-500">No challenges yet.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {userChallenges.map(({ bet, challenge }) => (
+                                <div
+                                    key={challenge.id}
+                                    className="border border-purple-100 rounded-xl p-4 hover:shadow-md transition-shadow"
+                                >
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div>
+                                            <h3 className="font-semibold text-gray-800">{bet.title}</h3>
+                                            <p className="text-sm text-gray-500">by @{bet.username}</p>
+                                        </div>
+                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${challenge.status === 'accepted' ? 'bg-green-100 text-green-700' :
+                                            challenge.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                                'bg-red-100 text-red-700'
+                                            }`}>
+                                            {challenge.status.toUpperCase()}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between text-sm text-gray-500">
+                                        <span className="font-semibold text-purple-600">
+                                            Staked {challenge.amount} pts
+                                            {bet.status === 'lost' && <span className="text-green-600 ml-1">(Won!)</span>}
+                                            {bet.status === 'won' && <span className="text-red-600 ml-1">(Lost)</span>}
+                                        </span>
+                                        <span>{new Date(challenge.created_at).toLocaleDateString()}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Floating Action Button - Create Bet */}
+            <button
+                onClick={() => user ? setShowCreateBet(true) : setShowAuthPrompt(true)}
+                className="fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-r from-competitive-dark to-competitive-DEFAULT text-white rounded-full shadow-lg hover:shadow-xl transition-all hover:scale-110 flex items-center justify-center text-3xl font-bold"
+                title="Create a new bet"
+            >
+                +
+            </button>
+
+            {showAuthPrompt && (
+                <AuthPrompt onClose={() => setShowAuthPrompt(false)} />
+            )}
+            {showCreateBet && (
+                <CreateBetModal
+                    onClose={() => setShowCreateBet(false)}
+                    onSubmit={async (title, criteria, amount) => {
+                        const response = await apiService.createBet(title, criteria, amount)
+                        if (response.data) {
+                            setShowCreateBet(false)
+                            fetchUserData()
+                        } else {
+                            alert(response.error || 'Failed to create bet')
+                        }
+                    }}
+                />
+            )}
+        </div>
+    )
+}

@@ -12,7 +12,11 @@ class UserBase(BaseModel):
     email: EmailStr
 
 
-ALLOWED_EMAIL_DOMAINS = ['tutamail.com', 'tutanota.com', 'protonmail.com', 'proton.me', 'gmail.com', 'icloud.com']
+ALLOWED_EMAIL_DOMAINS = [
+    'tutamail.com', 'tutanota.com', 
+    'protonmail.com', 'proton.me', 
+    'gmail.com', 'icloud.com'
+    ]
 
 
 class UserCreate(UserBase):
