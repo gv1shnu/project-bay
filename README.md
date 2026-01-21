@@ -75,4 +75,5 @@ Once the server is running, you can access:
 - [ ] Recommendation system
 - [ ] Adding web3 wallet to profile
 - [ ] Abuse prevention
+- [ ] First person perspective detection
 
