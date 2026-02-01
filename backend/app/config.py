@@ -22,4 +22,6 @@ class Settings(BaseSettings):
         "case_sensitive": True
     }
 
+    LLAMA_API_URL: str
+
 settings = Settings()

@@ -18,6 +18,7 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [userCount, setUserCount] = useState(0)
   const { user, logout, isAuthenticated, refreshUser } = useAuth()
+  const [createBetError, setCreateBetError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchBets()
@@ -84,11 +85,15 @@ export default function HomePage() {
   const handleCreateBet = async (title: string, criteria: string, amount: number) => {
     const response = await apiService.createBet(title, criteria, amount)
     if (response.data) {
+      setCreateBetError(null)
       await refreshUser()
       await fetchBets()
       setShowCreateBet(false)
     } else {
-      alert(response.error || 'Failed to create bet')
+      setCreateBetError(
+        response.error ||
+        "Bets must be written as a personal commitment (e.g. 'I will...')"
+      )
     }
   }
 
@@ -246,8 +251,13 @@ export default function HomePage() {
       )}
       {showCreateBet && (
         <CreateBetModal
-          onClose={() => setShowCreateBet(false)}
+          onClose={() => {
+            setShowCreateBet(false)
+            setCreateBetError(null)
+          }}
           onSubmit={handleCreateBet}
+          error={createBetError}
+          onClearError={() => setCreateBetError(null)}
         />
       )}
 

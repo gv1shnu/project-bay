@@ -1,7 +1,5 @@
 # Project BAY
 
-Challenging your friends with your web3 wallet on their commitments.
-
 ## Setup
 
 ### Prerequisites
@@ -9,6 +7,7 @@ Challenging your friends with your web3 wallet on their commitments.
 - Docker desktop
 - Python 3.14
 - Node.js 18+
+- llama3.2:1b
 
 ### Install Dependencies
 
@@ -36,6 +35,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 DATABASE_URL=postgresql://bay_user:bay_password@localhost:5432/betting_db
 TEST_DATABASE_URL=postgresql://bay_user:bay_password@localhost:5432/betting_test_db
 RATELIMIT_ENABLED=True
+LLAMA_API_URL=http://localhost:11434
 ```
 
 ## API Documentation
@@ -63,8 +63,9 @@ Once the server is running, you can access:
 
 ## Future Additions
 
-- [ ] win/loss decision maker
-- [ ] sort the feed by likes
+- [ ] proof submission to AI
+- [ ] win/loss decision
+- [ ] sort the feed by stars
 - [ ] friends network
 - [x] profile page
 - [ ] add star button to card
@@ -74,6 +75,7 @@ Once the server is running, you can access:
 - [ ] configuring AI as judge
 - [ ] Recommendation system
 - [ ] Adding web3 wallet to profile
-- [ ] Abuse prevention
-- [ ] First person perspective detection
+- [X] Abuse prevention
+- [X] First person perspective detection
+- [ ] Create an admin page
 

@@ -4,14 +4,16 @@ import { useAuth } from '../contexts/AuthContext'
 interface CreateBetModalProps {
     onClose: () => void
     onSubmit: (title: string, criteria: string, amount: number) => void
+    error?: any
+    onClearError?: () => void
 }
 
-export default function CreateBetModal({ onClose, onSubmit }: CreateBetModalProps) {
+export default function CreateBetModal({ onClose, onSubmit, error, onClearError }: CreateBetModalProps) {
     const { isAuthenticated, user } = useAuth()
     const [title, setTitle] = useState('')
     const [criteria, setCriteria] = useState('')
     const [amount, setAmount] = useState('')
-    const [error, setError] = useState('')
+    const [localError, setLocalError] = useState('')
 
     useEffect(() => {
         document.body.style.overflow = 'hidden'
@@ -22,26 +24,27 @@ export default function CreateBetModal({ onClose, onSubmit }: CreateBetModalProp
 
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault()
-        setError('')
+        setLocalError('')
+        onClearError?.()
 
         if (!title.trim()) {
-            setError('Please enter a title for your bet')
+            setLocalError('Please enter a title for your bet')
             return
         }
 
         if (!criteria.trim()) {
-            setError('Please enter success criteria')
+            setLocalError('Please enter success criteria')
             return
         }
 
         const numAmount = parseInt(amount)
         if (!amount || isNaN(numAmount) || numAmount <= 0) {
-            setError('Please enter a valid stake amount')
+            setLocalError('Please enter a valid stake amount')
             return
         }
 
         if (user && numAmount > user.points) {
-            setError(`You only have ${user.points} points`)
+            setLocalError(`You only have ${user.points} points`)
             return
         }
 
@@ -56,6 +59,16 @@ export default function CreateBetModal({ onClose, onSubmit }: CreateBetModalProp
 
     if (!isAuthenticated) {
         return null
+    }
+
+    const renderError = () => {
+        const displayError = localError || error
+        if (!displayError) return null
+
+        if (typeof displayError === 'object') {
+            return displayError.detail?.[0]?.msg || displayError.message || JSON.stringify(displayError)
+        }
+        return displayError
     }
 
     return (
@@ -92,7 +105,8 @@ export default function CreateBetModal({ onClose, onSubmit }: CreateBetModalProp
                             value={title}
                             onChange={(e) => {
                                 setTitle(e.target.value)
-                                setError('')
+                                setLocalError('')
+                                onClearError?.()
                             }}
                             placeholder="e.g., Run 5km every day for a week"
                             className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-competitive-DEFAULT focus:ring-2 focus:ring-competitive-light text-lg"
@@ -109,7 +123,8 @@ export default function CreateBetModal({ onClose, onSubmit }: CreateBetModalProp
                             value={criteria}
                             onChange={(e) => {
                                 setCriteria(e.target.value)
-                                setError('')
+                                setLocalError('')
+                                onClearError?.()
                             }}
                             placeholder="How will you prove success? e.g., Screenshot from fitness app"
                             rows={2}
@@ -127,7 +142,8 @@ export default function CreateBetModal({ onClose, onSubmit }: CreateBetModalProp
                             value={amount}
                             onChange={(e) => {
                                 setAmount(e.target.value)
-                                setError('')
+                                setLocalError('')
+                                onClearError?.()
                             }}
                             min="1"
                             placeholder="Enter amount to stake"
@@ -138,8 +154,8 @@ export default function CreateBetModal({ onClose, onSubmit }: CreateBetModalProp
                         )}
                     </div>
 
-                    {error && (
-                        <p className="mb-4 text-sm text-red-600">{error}</p>
+                    {(localError || error) && (
+                        <p className="mb-4 text-sm text-red-600">{renderError()}</p>
                     )}
 
                     <div className="flex gap-3">
