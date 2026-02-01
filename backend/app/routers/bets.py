@@ -11,6 +11,7 @@ from app.models import BetStatus, ChallengeStatus
 from app.config import settings
 from app.logging_config import get_logger
 from app.exceptions import InsufficientFundsError, BetNotFoundError, InvalidBetAmountError
+from app.utils.validation import is_personal
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/bets", tags=["bets"])
@@ -28,7 +29,7 @@ def validate_points(user: models.User, amount: int) -> bool:
 
 @router.post("/", response_model=schemas.BetResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
-def create_bet(
+async def create_bet(
     request: Request,
     bet: schemas.BetCreate,
     current_user: models.User = Depends(get_current_user),
@@ -38,13 +39,23 @@ def create_bet(
     # Validate creator has enough points
     validate_points(current_user, bet.amount)
     
+    # validate first person perspective
+    if not await is_personal(bet.title):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Bets must be written as a personal commitment "
+                "(e.g. 'I will win every Valorant match today')."
+            )
+        )
+
     # Deduct creator's stake
     current_user.points = int(current_user.points) - bet.amount
     
     db_bet = models.Bet(
         user_id=current_user.id,
         title=bet.title,
-        amount=bet.amount,  # Creator's initial stake
+        amount=bet.amount, 
         criteria=bet.criteria,
         status=BetStatus.ACTIVE
     )
