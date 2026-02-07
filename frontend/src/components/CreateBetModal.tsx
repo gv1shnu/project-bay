@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 
 interface CreateBetModalProps {
     onClose: () => void
-    onSubmit: (title: string, criteria: string, amount: number) => void
+    onSubmit: (title: string, criteria: string, amount: number, deadline: string) => void
     error?: any
     onClearError?: () => void
 }
@@ -13,6 +13,7 @@ export default function CreateBetModal({ onClose, onSubmit, error, onClearError 
     const [title, setTitle] = useState('')
     const [criteria, setCriteria] = useState('')
     const [amount, setAmount] = useState('')
+    const [deadline, setDeadline] = useState('')
     const [localError, setLocalError] = useState('')
 
     useEffect(() => {
@@ -43,12 +44,23 @@ export default function CreateBetModal({ onClose, onSubmit, error, onClearError 
             return
         }
 
+        if (!deadline) {
+            setLocalError('Please set a deadline for your bet')
+            return
+        }
+
+        const deadlineDate = new Date(deadline)
+        if (deadlineDate <= new Date()) {
+            setLocalError('Deadline must be in the future')
+            return
+        }
+
         if (user && numAmount > user.points) {
             setLocalError(`You only have ${user.points} points`)
             return
         }
 
-        onSubmit(title.trim(), criteria.trim(), numAmount)
+        onSubmit(title.trim(), criteria.trim(), numAmount, deadline)
     }
 
     const handleBackdropClick = (e: MouseEvent<HTMLDivElement>) => {
@@ -152,6 +164,23 @@ export default function CreateBetModal({ onClose, onSubmit, error, onClearError 
                         {user && (
                             <p className="text-xs text-gray-500 mt-1">Available: {user.points} points</p>
                         )}
+                    </div>
+
+                    <div className="mb-6">
+                        <label htmlFor="deadline" className="block text-sm font-semibold text-gray-700 mb-2">
+                            Deadline
+                        </label>
+                        <input
+                            type="datetime-local"
+                            id="deadline"
+                            value={deadline}
+                            onChange={(e) => {
+                                setDeadline(e.target.value)
+                                setLocalError('')
+                                onClearError?.()
+                            }}
+                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-competitive-DEFAULT focus:ring-2 focus:ring-competitive-light text-lg"
+                        />
                     </div>
 
                     {(localError || error) && (

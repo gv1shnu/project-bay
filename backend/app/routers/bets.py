@@ -57,6 +57,7 @@ async def create_bet(
         title=bet.title,
         amount=bet.amount, 
         criteria=bet.criteria,
+        deadline=bet.deadline,
         status=BetStatus.ACTIVE
     )
     db.add(db_bet)
@@ -97,7 +98,7 @@ def get_public_bets(
         bets_with_data.append(schemas.BetWithUsername(
             id=bet.id, user_id=bet.user_id, title=bet.title, amount=bet.amount,
             criteria=bet.criteria, status=bet.status, created_at=bet.created_at,
-            updated_at=bet.updated_at, username=bet.user.username, challenges=challenges
+            updated_at=bet.updated_at, username=bet.user.username, challenges=challenges, deadline=bet.deadline
         ))
     
     return schemas.PaginatedResponse(

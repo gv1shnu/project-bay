@@ -197,19 +197,20 @@ class ApiService {
     }>(`/bets/${betId}`)
   }
 
-  async createBet(title: string, criteria: string, amount: number) {
+  async createBet(title: string, criteria: string, amount: number, deadline: string) {
     return this.request<{
       id: number
       user_id: number
       title: string
       amount: number
       criteria: string
+      deadline: string
       status: 'active' | 'won' | 'lost' | 'cancelled'
       created_at: string
       updated_at: string | null
     }>('/bets/', {
       method: 'POST',
-      body: JSON.stringify({ title, criteria, amount }),
+      body: JSON.stringify({ title, criteria, amount, deadline }),
     })
   }
 

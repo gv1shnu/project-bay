@@ -78,12 +78,14 @@ class BetBase(BaseModel):
 
 class BetCreate(BetBase):
     amount: int = Field(..., gt=0, description="Creator's stake amount in points")
+    deadline: datetime = Field(..., description="Deadline for the bet completion")
 
 
 class BetResponse(BetBase):
     id: int
     user_id: int
     amount: int  # Total matched stake
+    deadline: datetime
     status: BetStatus
     created_at: datetime
     updated_at: Optional[datetime] = None

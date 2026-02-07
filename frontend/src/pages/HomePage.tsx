@@ -82,8 +82,8 @@ export default function HomePage() {
     }
   }
 
-  const handleCreateBet = async (title: string, criteria: string, amount: number) => {
-    const response = await apiService.createBet(title, criteria, amount)
+  const handleCreateBet = async (title: string, criteria: string, amount: number, deadline: string) => {
+    const response = await apiService.createBet(title, criteria, amount, deadline)
     if (response.data) {
       setCreateBetError(null)
       await refreshUser()
