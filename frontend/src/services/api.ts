@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 interface ApiResponse<T> {
   data?: T
@@ -29,7 +29,7 @@ class ApiService {
     }
 
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`
+      (headers as any)['Authorization'] = `Bearer ${token}`;
     }
 
     try {
@@ -81,7 +81,6 @@ class ApiService {
     formData.append('username', username)
     formData.append('password', password)
 
-    const token = this.getToken()
     const headers: HeadersInit = {
       'Content-Type': 'application/x-www-form-urlencoded',
     }

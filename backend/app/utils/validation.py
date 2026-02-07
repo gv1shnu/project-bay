@@ -1,3 +1,5 @@
+# Detects whether first person (personal) commitments using a combination of LLM and regex.
+
 import re
 import httpx
 import logging
