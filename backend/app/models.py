@@ -45,6 +45,7 @@ class Bet(Base):
     title = Column(String, nullable=False)
     amount = Column(Integer, nullable=False)  # Creator's total matched stake
     criteria = Column(String, nullable=False)
+    deadline = Column(DateTime(timezone=True), nullable=False)
     status = Column(Enum(BetStatus), default=BetStatus.ACTIVE, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -1,19 +1,26 @@
 # Project BAY
 
+Project BAY is a social challenge platform where users stake personal commitments against friends using their points.
+
+## Demo
+
+-- add screenshot here
+
+## Tech stack
+
+```
+Frontend: React, Typescript, Vite
+Backend:  FastAPI, Python v3.14
+Database: Postgres (via Docker)
+LLM:      Llama v3.2 1b (via Docker)
+```
+
 ## Setup
-
-### Prerequisites
-
-- Docker desktop
-- Python 3.14
-- Node.js 18+
-- llama3.2:1b
 
 ### Install Dependencies
 
 ```bash
-cd frontend
-npm install
+cd frontend && npm install
 ```
 
 ```bash
@@ -26,7 +33,7 @@ pip install -r requirements.txt
 
 ### Environment Configuration
 
-Create a `.env` file in the backend directory:
+Create an `.env` file in the backend directory:
 
 ```env
 SECRET_KEY=your-secret-key-here-change-in-production
@@ -48,34 +55,94 @@ Once the server is running, you can access:
 
 1. Start the backend server:
    ```bash
-   cd backend/
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   cd backend && uvicorn app.main:app
    ```
 
 2. Start the frontend (in a separate terminal):
    ```bash
-   cd frontend
-   npm run dev
+   cd frontend && npm run dev
    ```
 
 3. The frontend will be available at `http://localhost:5173` and will automatically connect to the backend API at `http://localhost:8000`.
 
 
-## Future Additions
+## To do
 
-- [ ] proof submission to AI
-- [ ] win/loss decision
+- [ ] add cancel button
+- [x] add deadline to card
+- [ ] add star button to card
 - [ ] sort the feed by stars
 - [ ] friends network
-- [x] profile page
-- [ ] add star button to card
-- [x] Search functionality
-- [ ] Dark mode
-- [x] authentication (login/signup)
+- [ ] proof submission to AI
 - [ ] configuring AI as judge
-- [ ] Recommendation system
-- [ ] Adding web3 wallet to profile
-- [X] Abuse prevention
-- [X] First person perspective detection
+- [ ] win/loss decision
+- [ ] credit/refund amount
 - [ ] Create an admin page
 
+
+## Implemented
+
+- [x] profile page
+- [x] Search functionality
+- [x] authentication (login/signup)
+- [X] Abuse prevention
+- [X] First person perspective detection
+
+
+## Future Additions
+
+- [ ] Dark mode
+- [ ] Recommendation system
+- [ ] Adding web3 wallet to profile
+
+## Project Structure
+
+```
+project-bay/
+├── backend/
+│   ├── app/
+│   │   ├── auth.py                # JWT, password hashing, auth dependencies
+│   │   ├── config.py              # Configuration & settings
+│   │   ├── database.py            # DB engine & session
+│   │   ├── exceptions.py          # Custom exceptions
+│   │   ├── logging_config.py      # Logging setup
+│   │   ├── main.py                # FastAPI app entrypoint
+│   │   ├── models.py              # SQLAlchemy models
+│   │   ├── schemas.py             # Pydantic request/response schemas
+│   │   ├── routers/               # FastAPI HTTP layer with Auth and Bet endpoints
+│   │   └── utils/                 # Validation utilities
+│   ├── initdb/                    # Test Database initialization script
+│   ├── tests/                     # Unit & integration tests
+│   ├── docker-compose.yml         # Docker services configuration
+│   ├── requirements.txt           # Python dependencies
+│   └── .env                       # Environment variables
+│   └── run.py                     # Application runner
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/            # Reusable UI components
+│   │   │   ├── AuthPrompt.tsx
+│   │   │   ├── BetCard.tsx
+│   │   │   ├── ChallengeOverlay.tsx
+│   │   │   ├── CreateBetModal.tsx
+│   │   │   └── ProtectedRoute.tsx
+│   │   ├── contexts/              # React context providers
+│   │   ├── pages/                 # Route-level pages
+│   │   ├── services/              # API clients & frontend business logic
+│   │   ├── utils/                 # Fetch avatar
+│   │   ├── App.tsx
+│   │   ├── index.css
+│   │   ├── main.tsx
+│   │   └── types.ts
+│   ├── .env                       # contains env variable to API
+│   ├── img/                       # Favicon
+│   ├── index.html
+│   ├── package.json
+│   ├── postcss.config.js
+│   ├── tailwind.config.js
+│   ├── tsconfig.json
+│   ├── tsconfig.node.json
+│   └── vite.config.ts
+│
+└── README.md
+```
