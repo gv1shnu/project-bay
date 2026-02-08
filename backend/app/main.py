@@ -5,7 +5,8 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from app.database import engine, Base
-from app.routers import auth, bets
+from app.routers import auth
+from app.routers.bets import router as bets_router
 from app.config import settings
 from app.logging_config import setup_logging, get_logger
 from app.exceptions import BettingAPIException, betting_api_exception_handler
@@ -56,7 +57,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
-app.include_router(bets.router)
+app.include_router(bets_router)
 
 
 @app.get("/")
