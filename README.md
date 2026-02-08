@@ -31,12 +31,6 @@ docker-compose up -d
 pip install -r requirements.txt
 ```
 
-## API Documentation
-
-Once the server is running, you can access:
-- **Interactive API Docs**: http://localhost:8000/docs (Swagger UI)
-- **Alternative Docs**: http://localhost:8000/redoc (ReDoc)
-
 ## Running locally
 
 1. Start the backend server:
@@ -49,19 +43,16 @@ Once the server is running, you can access:
    cd frontend && npm run dev
    ```
 
-3. The frontend will be available at `http://localhost:5173` and will automatically connect to the backend API at `http://localhost:8000`.
-
-
 ## To do
 
-- [ ] add cancel button
+- [x] add cancel button
 - [ ] add star button to card
 - [ ] sort the feed by stars
 - [ ] friends network
 - [ ] proof submission to AI
 - [ ] configuring AI as judge
 - [ ] win/loss decision
-- [ ] credit/refund points
+- [x] credit/refund points
 - [ ] Create an admin page
 - [x] profile page
 - [x] add deadline to card
@@ -211,8 +202,37 @@ graph TB
     style Client fill:#f0f0f0,color:#000
 ```
 
+## Bottlenecks
+
+- Single API instance (no load balancing)
+- Single DB instance
+    ```text
+        Current: SQLAlchemy creates new connection per request
+        Impact: Connection exhaustion at ~50-100 concurrent users
+        Solution: Add database connection pooling, will support 3x more.
+    ```
+- No response caching
+    ```text
+    Current: Every request hits the database
+    Impact: Redundant queries, slower response times
+    Solution: Cache user profiles, bet listings, in Redis. It'll reduce db load by 40%.
+    ```
+- Llama - too slow
+    ```text
+        Current: Synchronous blocking calls (2-10 seconds)
+        Impact: Request hangs while waiting for LLM evaluation
+        Solution: Add calls to queue instead of blocking
+    ```
+- Single server architecture
+    ```text
+    Current: No horizontal scaling
+    Impact: Cannot distribute load across multiple instances
+    ```
+
+
 ## Future Additions
 
 - [ ] Dark mode
 - [ ] Recommendation system
+- [ ] Vibe coded ios app
 - [ ] Adding web3 wallet to profile

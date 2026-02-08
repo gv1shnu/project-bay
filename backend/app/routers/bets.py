@@ -12,6 +12,7 @@ from app.config import settings
 from app.logging_config import get_logger
 from app.exceptions import InsufficientFundsError, BetNotFoundError, InvalidBetAmountError
 from app.utils.validation import is_personal
+from datetime import datetime
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/bets", tags=["bets"])
@@ -357,11 +358,21 @@ def update_bet_status(
             logger.info(f"Challenger {challenger.username} won {challenge.amount * 2} points from bet {bet_id}")
             
     elif bet_update.status == BetStatus.CANCELLED:
-        # Refund everyone
+        # Refund creator
         current_user.points = int(current_user.points) + bet.amount
-        for challenge in accepted_challenges:
-            challenger = db.query(models.User).filter(models.User.id == challenge.challenger_id).first()
-            challenger.points = int(challenger.points) + challenge.amount
+        logger.info(f"Refunded {bet.amount} points to creator {current_user.id}")
+        
+        # Refund and cancel all non-rejected challenges
+        for challenge in bet.challenges:
+            if challenge.status != ChallengeStatus.REJECTED:
+                challenger = db.query(models.User).filter(models.User.id == challenge.challenger_id).first()
+                challenger.points = int(challenger.points) + challenge.amount
+                # ASSIGN THE ENUM MEMBER, NOT THE STRING
+                challenge.status = ChallengeStatus.CANCELLED
+                logger.info(f"Refunded {challenge.amount} points to challenger {challenge.challenger_id}, challenge marked cancelled")
+        
+        # ASSIGN THE ENUM MEMBER, NOT THE STRING
+        bet.status = BetStatus.CANCELLED
         logger.info(f"Bet {bet_id} cancelled, all stakes refunded")
     
     db.commit()
