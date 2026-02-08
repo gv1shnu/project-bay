@@ -9,6 +9,7 @@ export interface Bet {
   created_at: string;
   updated_at: string | null;
   username?: string;
+  deadline: string;
   challenges?: Challenge[];
 }
 

@@ -16,9 +16,10 @@ class BetStatus(str, enum.Enum):
 
 class ChallengeStatus(str, enum.Enum):
     """Possible statuses for a challenge."""
-    PENDING = "pending"
-    ACCEPTED = "accepted"
-    REJECTED = "rejected"
+    PENDING = "pending" 
+    ACCEPTED = "accepted" 
+    REJECTED = "rejected" 
+    CANCELLED = "cancelled"
 
 
 class User(Base):

@@ -10,6 +10,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U bay_user -d betting_db"]
@@ -25,16 +26,26 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     restart: unless-stopped
-    entrypoint: ["/bin/sh", "-c"]
-    command: >
-      "ollama serve & 
-      sleep 5; 
-      if ! ollama list | grep -q 'llama3.2:1b'; then 
-        ollama pull llama3.2:1b; 
-      fi; 
-      wait"
+    entrypoint: /bin/sh
+    command: -c |
+      set -e
+
+      ollama serve &
+      SERVER_PID=$$!
+
+      echo "Waiting for Ollama..."
+      sleep 5
+
+      if ! ollama list | grep -q "llama3.2:1b"; then
+        echo "Pulling llama3.2:1b..."
+        ollama pull llama3.2:1b
+      else
+        echo "Model already present"
+      fi
+
+      wait $$SERVER_PID
     healthcheck:
-      test: ["CMD-SHELL", "ollama list | grep -q 'llama3.2:1b' || exit 1"]
+      test: ["CMD-SHELL", "ollama list | grep -q 'llama3.2:1b'"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -94,6 +94,18 @@ export default function ProfilePage() {
         }
     }
 
+    const handleCancelBet = async (betId: number) => {
+        if (confirm('Are you sure you want to cancel this bet? All stakes will be refunded.')) {
+            const response = await apiService.updateBetStatus(betId, 'cancelled')
+            if (response.data) {
+                // Refresh the data
+                await fetchUserData()
+            } else {
+                alert(response.error || 'Failed to cancel bet')
+            }
+        }
+    }
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-competitive-light/20 via-white to-friendly-light/20">
             <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -218,10 +230,10 @@ export default function ProfilePage() {
                                         </span>
                                     </div>
                                     <p className="text-sm text-gray-600 mb-2">{bet.criteria}</p>
-                                    <div className="flex justify-between text-sm text-gray-500">
+                                    <div className="flex justify-between items-center text-sm text-gray-500">
                                         <div className="flex gap-4">
                                             <span className="font-semibold text-gray-600">
-                                                Your stake: {bet.amount} pts
+                                                Author stake: {bet.amount} pts
                                             </span>
                                             <span className="font-semibold text-competitive-dark">
                                                 Total: {bet.amount + (bet.challenges?.filter(c => c.status !== 'rejected').reduce((sum, c) => sum + c.amount, 0) || 0)} pts
@@ -229,7 +241,17 @@ export default function ProfilePage() {
                                                 {bet.status === 'lost' && <span className="text-red-600 ml-1">(-{bet.amount})</span>}
                                             </span>
                                         </div>
-                                        <span>{new Date(bet.created_at).toLocaleDateString()}</span>
+                                        <div className="flex items-center gap-4">
+                                            <span>{new Date(bet.created_at).toLocaleDateString()}</span>
+                                            {isOwnProfile && bet.status === 'active' && new Date() < new Date(bet.deadline) && (
+                                                <button
+                                                    onClick={() => handleCancelBet(bet.id)}
+                                                    className="px-3 py-1 bg-red-100 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-200 transition-colors"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -263,10 +285,12 @@ export default function ProfilePage() {
                                             <h3 className="font-semibold text-gray-800">{bet.title}</h3>
                                             <p className="text-sm text-gray-500">by @{bet.username}</p>
                                         </div>
-                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${challenge.status === 'accepted' ? 'bg-green-100 text-green-700' :
+                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                            challenge.status === 'accepted' ? 'bg-green-100 text-green-700' :
                                             challenge.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                                'bg-red-100 text-red-700'
-                                            }`}>
+                                            challenge.status === 'cancelled' ? 'bg-gray-100 text-gray-700' :
+                                            'bg-red-100 text-red-700'
+                                        }`}>
                                             {challenge.status.toUpperCase()}
                                         </span>
                                     </div>
@@ -300,8 +324,8 @@ export default function ProfilePage() {
             {showCreateBet && (
                 <CreateBetModal
                     onClose={() => setShowCreateBet(false)}
-                    onSubmit={async (title, criteria, amount) => {
-                        const response = await apiService.createBet(title, criteria, amount)
+                    onSubmit={async (title, criteria, amount, deadline) => {
+                        const response = await apiService.createBet(title, criteria, amount, deadline)
                         if (response.data) {
                             setShowCreateBet(false)
                             fetchUserData()
