@@ -1,12 +1,17 @@
 """
-Custom exception classes and global exception handlers for the betting API.
+exceptions.py — Custom exception classes for the betting API.
+
+All custom exceptions inherit from BettingAPIException, which is caught
+by a global handler in main.py and returned as a clean JSON error response.
+
+This pattern keeps error handling consistent across all endpoints.
 """
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 
 
 class BettingAPIException(Exception):
-    """Base exception for the betting API."""
+    """Base exception for all betting API errors. Subclass this for specific errors."""
     
     def __init__(self, message: str, status_code: int = 400):
         self.message = message
@@ -15,7 +20,7 @@ class BettingAPIException(Exception):
 
 
 class InsufficientFundsError(BettingAPIException):
-    """Raised when user has insufficient points for a transaction."""
+    """Raised when user tries to stake more points than they have."""
     
     def __init__(self, available: float, required: float):
         self.available = available
@@ -25,7 +30,7 @@ class InsufficientFundsError(BettingAPIException):
 
 
 class BetNotFoundError(BettingAPIException):
-    """Raised when a bet is not found."""
+    """Raised when a bet ID doesn't exist in the database."""
     
     def __init__(self, bet_id: int):
         self.bet_id = bet_id
@@ -34,7 +39,7 @@ class BetNotFoundError(BettingAPIException):
 
 
 class UserAlreadyExistsError(BettingAPIException):
-    """Raised when trying to register with an existing username or email."""
+    """Raised when registering with a username or email that's already taken."""
     
     def __init__(self, field: str, value: str):
         self.field = field
@@ -44,7 +49,7 @@ class UserAlreadyExistsError(BettingAPIException):
 
 
 class InvalidCredentialsError(BettingAPIException):
-    """Raised when login credentials are invalid."""
+    """Raised on failed login attempt — wrong username or password."""
     
     def __init__(self):
         message = "Incorrect username or password"
@@ -52,7 +57,7 @@ class InvalidCredentialsError(BettingAPIException):
 
 
 class InvalidBetAmountError(BettingAPIException):
-    """Raised when bet amount is invalid."""
+    """Raised when bet amount is zero or negative."""
     
     def __init__(self, amount: float):
         self.amount = amount
@@ -61,7 +66,11 @@ class InvalidBetAmountError(BettingAPIException):
 
 
 async def betting_api_exception_handler(request: Request, exc: BettingAPIException) -> JSONResponse:
-    """Global exception handler for BettingAPIException."""
+    """
+    Global exception handler registered in main.py.
+    Catches any BettingAPIException and returns a uniform JSON error response:
+      {"detail": "error message here"}
+    """
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.message}

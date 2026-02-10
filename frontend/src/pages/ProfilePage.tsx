@@ -1,3 +1,20 @@
+/**
+ * ProfilePage.tsx — User profile page.
+ *
+ * Shows a user's profile (own or others') with:
+ *   - Avatar, username, points, join date
+ *   - Created bets stats (total / won / lost / active)
+ *   - Challenged bets stats (total / won / lost / pending)
+ *   - List of all bets the user created (with cancel option for own active bets)
+ *   - List of all challenges the user made (with win/loss indicators)
+ *   - "Add Friend" placeholder button (feature coming soon)
+ *   - Floating "+" button to create new bets
+ *
+ * Data source: Fetches ALL public bets, then filters for the profile user.
+ * Challenge win/loss is determined by cross-referencing challenge status with bet status:
+ *   - Challenger wins when the BET is "lost" (creator failed their commitment)
+ *   - Challenger loses when the BET is "won" (creator succeeded)
+ */
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -8,10 +25,14 @@ import CreateBetModal from '../components/CreateBetModal'
 import AuthPrompt from '../components/AuthPrompt'
 
 export default function ProfilePage() {
+    // Get username from URL params (e.g., /profile/johndoe)
     const { username } = useParams<{ username: string }>()
     const { user } = useAuth()
     const navigate = useNavigate()
-    const [userBets, setUserBets] = useState<Bet[]>([])
+
+    // ── State ──
+    const [userBets, setUserBets] = useState<Bet[]>([])  // Bets created by this user
+    // Challenges this user made against other people's bets
     const [userChallenges, setUserChallenges] = useState<{ bet: Bet, challenge: { id: number, amount: number, status: string, created_at: string } }[]>([])
     const [loading, setLoading] = useState(true)
     const [createdStats, setCreatedStats] = useState({ total: 0, won: 0, lost: 0, active: 0 })
@@ -20,16 +41,23 @@ export default function ProfilePage() {
     const [showCreateBet, setShowCreateBet] = useState(false)
     const [showAuthPrompt, setShowAuthPrompt] = useState(false)
 
+    // Is the logged-in user viewing their own profile?
     const isOwnProfile = user?.username === username
 
+    // Re-fetch data when the username in the URL changes
     useEffect(() => {
         fetchUserData()
     }, [username])
 
+    /**
+     * Fetch all profile data: user info, their bets, and their challenges.
+     * Strategy: fetch ALL public bets, then filter client-side for this user.
+     * Not ideal for scaling, but works fine for current user count.
+     */
     const fetchUserData = async () => {
         setLoading(true)
 
-        // Fetch user profile to get points
+        // 1. Fetch user profile (points, join date)
         if (username) {
             const profileResponse = await apiService.getUserProfile(username)
             if (profileResponse.data) {
@@ -40,13 +68,14 @@ export default function ProfilePage() {
             }
         }
 
-        // Fetch bets
+        // 2. Fetch all public bets and filter for this user
         const response = await apiService.getPublicBets()
         if (response.data) {
-            // Bets this user created
+            // ── Created bets: bets where this user is the creator ──
             const createdBets = response.data.filter((bet: Bet) => bet.username === username)
             setUserBets(createdBets)
 
+            // Calculate created bet stats
             setCreatedStats({
                 total: createdBets.length,
                 won: createdBets.filter((b: Bet) => b.status === 'won').length,
@@ -54,19 +83,23 @@ export default function ProfilePage() {
                 active: createdBets.filter((b: Bet) => b.status === 'active').length
             })
 
-            // Challenges this user made
+            // ── Challenged bets: challenges this user made on other people's bets ──
             const challengesList: { bet: Bet, challenge: { id: number, amount: number, status: string, created_at: string } }[] = []
             let challengeTotal = 0, challengeWon = 0, challengeLost = 0, challengePending = 0
+
             response.data.forEach((bet: Bet) => {
                 if (bet.challenges) {
+                    // Find challenges made by this profile user
                     bet.challenges.filter(c => c.challenger_username === username).forEach(c => {
                         challengesList.push({ bet, challenge: { id: c.id, amount: c.amount, status: c.status, created_at: c.created_at } })
                         challengeTotal++
                         if (c.status === 'accepted') {
-                            // Bet resolved - check outcome (challenger wins when bet LOST)
+                            // Determine outcome by checking the BET's status:
+                            // Challenger wins when bet is LOST (creator failed)
+                            // Challenger loses when bet is WON (creator succeeded)
                             if (bet.status === 'lost') challengeWon++
                             else if (bet.status === 'won') challengeLost++
-                            else challengePending++
+                            else challengePending++  // Bet still active
                         } else if (c.status === 'pending') {
                             challengePending++
                         }
@@ -85,21 +118,22 @@ export default function ProfilePage() {
         setLoading(false)
     }
 
+    /** Map bet status to Tailwind color classes for status badges */
     const getStatusColor = (status: string) => {
         switch (status) {
             case 'won': return 'bg-green-100 text-green-700'
             case 'lost': return 'bg-red-100 text-red-700'
             case 'cancelled': return 'bg-gray-100 text-gray-700'
-            default: return 'bg-yellow-100 text-yellow-700'
+            default: return 'bg-yellow-100 text-yellow-700'  // active
         }
     }
 
+    /** Cancel a bet — confirms with user, then calls API to cancel and refund all stakes */
     const handleCancelBet = async (betId: number) => {
         if (confirm('Are you sure you want to cancel this bet? All stakes will be refunded.')) {
             const response = await apiService.updateBetStatus(betId, 'cancelled')
             if (response.data) {
-                // Refresh the data
-                await fetchUserData()
+                await fetchUserData()  // Refresh profile data
             } else {
                 alert(response.error || 'Failed to cancel bet')
             }
@@ -109,7 +143,7 @@ export default function ProfilePage() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-competitive-light/20 via-white to-friendly-light/20">
             <div className="container mx-auto px-4 py-8 max-w-4xl">
-                {/* Back Button */}
+                {/* ── Back to feed button ── */}
                 <button
                     onClick={() => navigate('/')}
                     className="mb-6 flex items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors"
@@ -120,9 +154,10 @@ export default function ProfilePage() {
                     Back to Feed
                 </button>
 
-                {/* Profile Header */}
+                {/* ══════════════ Profile Header ══════════════ */}
                 <div className="bg-white rounded-2xl shadow-lg p-8 mb-8">
                     <div className="flex flex-col md:flex-row items-center gap-6">
+                        {/* Large avatar */}
                         <img
                             src={getAvatarUrl(username || '')}
                             alt={`${username}'s avatar`}
@@ -130,6 +165,7 @@ export default function ProfilePage() {
                         />
                         <div className="text-center md:text-left flex-1">
                             <h1 className="text-3xl font-bold text-gray-800 mb-2">@{username}</h1>
+                            {/* Points and join date */}
                             {profileUser && (
                                 <div className="mb-4">
                                     <p className="text-xl text-competitive-dark font-semibold">
@@ -140,7 +176,8 @@ export default function ProfilePage() {
                                     </p>
                                 </div>
                             )}
-                            {/* Created Bets Row */}
+
+                            {/* ── Created Bets Stats Row ── */}
                             <div className="mb-4">
                                 <p className="text-sm font-semibold text-gray-600 mb-2">Bets Created</p>
                                 <div className="flex flex-wrap justify-center md:justify-start gap-3">
@@ -163,7 +200,7 @@ export default function ProfilePage() {
                                 </div>
                             </div>
 
-                            {/* Challenged Bets Row */}
+                            {/* ── Challenged Bets Stats Row ── */}
                             <div>
                                 <p className="text-sm font-semibold text-gray-600 mb-2">Bets Challenged</p>
                                 <div className="flex flex-wrap justify-center md:justify-start gap-3">
@@ -187,7 +224,7 @@ export default function ProfilePage() {
                             </div>
                         </div>
 
-                        {/* Add Friend Section - Right Side */}
+                        {/* ── Add Friend button (placeholder — only shown on other users' profiles) ── */}
                         {!isOwnProfile && user && (
                             <div className="text-center">
                                 <button
@@ -202,7 +239,7 @@ export default function ProfilePage() {
                     </div>
                 </div>
 
-                {/* Bets Section */}
+                {/* ══════════════ Created Bets List ══════════════ */}
                 <div className="bg-white rounded-2xl shadow-lg p-6">
                     <h2 className="text-xl font-bold text-gray-800 mb-6">
                         {isOwnProfile ? 'Your Bets' : `${username}'s Bets`}
@@ -223,6 +260,7 @@ export default function ProfilePage() {
                                     key={bet.id}
                                     className="border border-gray-100 rounded-xl p-4 hover:shadow-md transition-shadow"
                                 >
+                                    {/* Bet title + status badge */}
                                     <div className="flex justify-between items-start mb-2">
                                         <h3 className="font-semibold text-gray-800">{bet.title}</h3>
                                         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(bet.status)}`}>
@@ -230,19 +268,23 @@ export default function ProfilePage() {
                                         </span>
                                     </div>
                                     <p className="text-sm text-gray-600 mb-2">{bet.criteria}</p>
+                                    {/* Stakes and date info */}
                                     <div className="flex justify-between items-center text-sm text-gray-500">
                                         <div className="flex gap-4">
                                             <span className="font-semibold text-gray-600">
                                                 Author stake: {bet.amount} pts
                                             </span>
                                             <span className="font-semibold text-competitive-dark">
+                                                {/* Total = author stake + all non-rejected challenger stakes */}
                                                 Total: {bet.amount + (bet.challenges?.filter(c => c.status !== 'rejected').reduce((sum, c) => sum + c.amount, 0) || 0)} pts
+                                                {/* Show winnings/losses indicator for resolved bets */}
                                                 {bet.status === 'won' && <span className="text-green-600 ml-1">(+{bet.challenges?.filter(c => c.status === 'accepted').reduce((sum, c) => sum + c.amount, 0) || 0})</span>}
                                                 {bet.status === 'lost' && <span className="text-red-600 ml-1">(-{bet.amount})</span>}
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-4">
                                             <span>{new Date(bet.created_at).toLocaleDateString()}</span>
+                                            {/* Cancel button — only on own active bets before deadline */}
                                             {isOwnProfile && bet.status === 'active' && new Date() < new Date(bet.deadline) && (
                                                 <button
                                                     onClick={() => handleCancelBet(bet.id)}
@@ -259,7 +301,7 @@ export default function ProfilePage() {
                     )}
                 </div>
 
-                {/* Challenges Section */}
+                {/* ══════════════ Challenges List ══════════════ */}
                 <div className="bg-white rounded-2xl shadow-lg p-6 mt-6">
                     <h2 className="text-xl font-bold text-gray-800 mb-6">
                         {isOwnProfile ? 'Your Challenges' : `${username}'s Challenges`}
@@ -280,23 +322,26 @@ export default function ProfilePage() {
                                     key={challenge.id}
                                     className="border border-purple-100 rounded-xl p-4 hover:shadow-md transition-shadow"
                                 >
+                                    {/* Challenge info: bet title + challenge status */}
                                     <div className="flex justify-between items-start mb-2">
                                         <div>
                                             <h3 className="font-semibold text-gray-800">{bet.title}</h3>
                                             <p className="text-sm text-gray-500">by @{bet.username}</p>
                                         </div>
-                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                            challenge.status === 'accepted' ? 'bg-green-100 text-green-700' :
-                                            challenge.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                            challenge.status === 'cancelled' ? 'bg-gray-100 text-gray-700' :
-                                            'bg-red-100 text-red-700'
-                                        }`}>
+                                        {/* Challenge status badge with color coding */}
+                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${challenge.status === 'accepted' ? 'bg-green-100 text-green-700' :
+                                                challenge.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                                    challenge.status === 'cancelled' ? 'bg-gray-100 text-gray-700' :
+                                                        'bg-red-100 text-red-700'  // rejected
+                                            }`}>
                                             {challenge.status.toUpperCase()}
                                         </span>
                                     </div>
+                                    {/* Stake amount and outcome */}
                                     <div className="flex justify-between text-sm text-gray-500">
                                         <span className="font-semibold text-purple-600">
                                             Staked {challenge.amount} pts
+                                            {/* Outcome indicators — shown only for resolved bets */}
                                             {bet.status === 'lost' && <span className="text-green-600 ml-1">(Won!)</span>}
                                             {bet.status === 'won' && <span className="text-red-600 ml-1">(Lost)</span>}
                                         </span>
@@ -309,7 +354,7 @@ export default function ProfilePage() {
                 </div>
             </div>
 
-            {/* Floating Action Button - Create Bet */}
+            {/* ── Floating Action Button — Create Bet ── */}
             <button
                 onClick={() => user ? setShowCreateBet(true) : setShowAuthPrompt(true)}
                 className="fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-r from-competitive-dark to-competitive-DEFAULT text-white rounded-full shadow-lg hover:shadow-xl transition-all hover:scale-110 flex items-center justify-center text-3xl font-bold"
@@ -318,6 +363,7 @@ export default function ProfilePage() {
                 +
             </button>
 
+            {/* ── Modals ── */}
             {showAuthPrompt && (
                 <AuthPrompt onClose={() => setShowAuthPrompt(false)} />
             )}
@@ -328,7 +374,7 @@ export default function ProfilePage() {
                         const response = await apiService.createBet(title, criteria, amount, deadline)
                         if (response.data) {
                             setShowCreateBet(false)
-                            fetchUserData()
+                            fetchUserData()  // Refresh profile data to show new bet
                         } else {
                             alert(response.error || 'Failed to create bet')
                         }

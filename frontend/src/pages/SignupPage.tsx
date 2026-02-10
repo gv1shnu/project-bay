@@ -1,21 +1,37 @@
+/**
+ * SignupPage.tsx — User registration page.
+ *
+ * Four fields: username, email, password, confirm password.
+ * Client-side validation:
+ *   - Passwords must match
+ *   - Password min length: 6 characters
+ * On success, auto-logs in and redirects to homepage.
+ *
+ * NOTE: Backend additionally validates email domain (only gmail, protonmail, etc.)
+ * and username/email uniqueness.
+ */
 import { useState, FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function SignupPage() {
+  // Form state
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')       // Validation or API error
+  const [loading, setLoading] = useState(false) // Prevents double-submission
+
   const { signup } = useAuth()
   const navigate = useNavigate()
 
+  /** Validate fields and submit registration */
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
 
+    // Client-side validation
     if (password !== confirmPassword) {
       setError('Passwords do not match')
       return
@@ -29,12 +45,10 @@ export default function SignupPage() {
     setLoading(true)
 
     try {
-      const success = await signup(email, password, username)
-      if (success) {
-        navigate('/')
-      } else {
-        setError('Signup failed. Please try again.')
-      }
+      // signup() registers + auto-logs in (see AuthContext)
+      // If signup throws, the catch block below handles it.
+      await signup(email, password, username)
+      navigate('/')  // Redirect to homepage on success
     } catch (err) {
       setError('An error occurred. Please try again.')
     } finally {
@@ -45,6 +59,7 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-competitive-light/20 via-white to-friendly-light/20 flex items-center justify-center px-4">
       <div className="max-w-md w-full">
+        {/* App branding */}
         <div className="text-center mb-8">
           <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-competitive-dark to-friendly-dark bg-clip-text text-transparent">
             Bay
@@ -52,9 +67,11 @@ export default function SignupPage() {
           <p className="text-xl text-gray-600">Join the challenge!</p>
         </div>
 
+        {/* Registration card */}
         <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-100">
           <h2 className="text-2xl font-bold text-gray-800 mb-6">Create Account</h2>
 
+          {/* Error banner */}
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm">
               {error}
@@ -62,6 +79,7 @@ export default function SignupPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Username field */}
             <div>
               <label htmlFor="username" className="block text-sm font-semibold text-gray-700 mb-2">
                 Username
@@ -77,6 +95,7 @@ export default function SignupPage() {
               />
             </div>
 
+            {/* Email field — backend validates domain (only gmail, protonmail, etc.) */}
             <div>
               <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
                 Email
@@ -92,6 +111,7 @@ export default function SignupPage() {
               />
             </div>
 
+            {/* Password field — min 6 characters */}
             <div>
               <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
                 Password
@@ -108,6 +128,7 @@ export default function SignupPage() {
               />
             </div>
 
+            {/* Confirm password field — must match password */}
             <div>
               <label htmlFor="confirmPassword" className="block text-sm font-semibold text-gray-700 mb-2">
                 Confirm Password
@@ -124,6 +145,7 @@ export default function SignupPage() {
               />
             </div>
 
+            {/* Submit button */}
             <button
               type="submit"
               disabled={loading}
@@ -133,6 +155,7 @@ export default function SignupPage() {
             </button>
           </form>
 
+          {/* Link to login page */}
           <div className="mt-6 text-center">
             <p className="text-gray-600">
               Already have an account?{' '}
@@ -149,4 +172,3 @@ export default function SignupPage() {
     </div>
   )
 }
-
