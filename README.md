@@ -138,6 +138,8 @@ project-bay/
 └── README.md
 ```
 
+<sub><em>view in browser</em></sub>
+
 ## Database Architecture (ER Diagram)
 
 ```mermaid
