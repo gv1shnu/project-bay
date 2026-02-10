@@ -1,4 +1,12 @@
-"""Bet resolution endpoint: update bet status and distribute winnings."""
+"""
+routers/bets/resolution.py — Bet resolution endpoint.
+
+Endpoint:
+  PATCH /bets/{bet_id}  — Resolve a bet as won, lost, or cancelled
+
+Only the bet creator can resolve their own bet.
+Point distribution is handled by the service layer (bet_service.resolve_bet).
+"""
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 from slowapi import Limiter
@@ -18,9 +26,14 @@ limiter = Limiter(key_func=get_remote_address)
 def update_bet_status(
     request: Request,
     bet_id: int,
-    bet_update: schemas.BetUpdate,
-    current_user: models.User = Depends(get_current_user),
+    bet_update: schemas.BetUpdate,  # Contains the new status (won/lost/cancelled)
+    current_user: models.User = Depends(get_current_user),  # Must be the bet creator
     db: Session = Depends(get_db)
 ):
-    """Resolve bet (won/lost/cancelled) and distribute winnings."""
+    """
+    Resolve a bet and distribute points:
+      - WON: creator gets their stake + all accepted challenger stakes
+      - LOST: each accepted challenger gets 2x their stake
+      - CANCELLED: everyone gets their stakes refunded
+    """
     return resolve_bet(db, current_user, bet_id, bet_update.status)

@@ -1,248 +1,224 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+/**
+ * services/api.ts — Centralized API client for all backend communication.
+ *
+ * Provides a singleton `apiService` that handles:
+ *   - JWT token management (auto-inject Authorization header)
+ *   - Request formatting (JSON and form-encoded)
+ *   - Error handling (network errors, API errors)
+ *   - Type-safe generic request method
+ *
+ * All API calls go through this service — components never call fetch() directly.
+ */
+import { User, Bet, Challenge } from '../types';
 
+// API base URL from environment variables (set in frontend/.env)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+/**
+ * Standard response shape for all API calls.
+ * Either data or error will be populated, never both.
+ */
 interface ApiResponse<T> {
-  data?: T
-  error?: string
+  data?: T;
+  error?: string;
 }
 
+
 class ApiService {
+  private baseUrl: string;
+
+  constructor() {
+    this.baseUrl = API_BASE_URL;
+  }
+
+  /**
+   * Get the stored JWT token from localStorage.
+   * Returns null if user is not logged in.
+   */
   private getToken(): string | null {
-    return localStorage.getItem('token')
+    return localStorage.getItem('token');
   }
 
-  private setToken(token: string): void {
-    localStorage.setItem('token', token)
-  }
-
-  private removeToken(): void {
-    localStorage.removeItem('token')
-  }
-
+  /**
+   * Generic request method — all API calls go through this.
+   *
+   * Features:
+   *   - Auto-adds Authorization header if JWT is available
+   *   - Defaults to JSON content type
+   *   - Returns { data } on success, { error } on failure
+   *   - Handles network errors gracefully
+   *
+   * @param endpoint - API path (e.g., "/auth/login")
+   * @param options - Standard fetch options (method, body, headers)
+   */
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
-    const token = this.getToken()
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-      ...options.headers,
+    const token = this.getToken();
+
+    // Build headers — include auth token if available
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
-    if (token) {
-      (headers as any)['Authorization'] = `Bearer ${token}`;
+    // Default to JSON content type unless the caller specifies otherwise
+    // (login uses application/x-www-form-urlencoded, so it overrides this)
+    if (!options.headers || !(options.headers as Record<string, string>)['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
         ...options,
-        headers,
-      })
+        headers: {
+          ...headers,
+          ...(options.headers as Record<string, string>),
+        },
+      });
 
-      const data = await response.json()
-
+      // Handle non-OK responses (4xx, 5xx)
       if (!response.ok) {
-        return {
-          error: data.detail || `Error: ${response.statusText}`,
-        }
+        const errorData = await response.json().catch(() => null);
+        // Extract error message from backend response (usually in "detail" field)
+        const errorMessage = errorData?.detail || `Error: ${response.status}`;
+        return { error: typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage) };
       }
 
-      return { data }
-    } catch (error) {
-      return {
-        error: error instanceof Error ? error.message : 'Network error occurred',
-      }
+      // Parse successful response as JSON
+      const data = await response.json();
+      return { data };
+    } catch {
+      // Network error (server unreachable, CORS blocked, etc.)
+      return { error: 'Network error. Please try again.' };
     }
   }
 
-  // Auth endpoints
-  async register(username: string, email: string, password: string) {
-    const response = await this.request<{
-      id: number
-      username: string
-      email: string
-      points: number
-      created_at: string
-    }>('/auth/register', {
+
+  // ════════════════════════════════════════════════════════
+  // Auth Endpoints
+  // ════════════════════════════════════════════════════════
+
+  /** Register a new user. Backend creates account with 10 starting points. */
+  async register(username: string, email: string, password: string): Promise<ApiResponse<User>> {
+    return this.request<User>('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ username, email, password }),
-    })
+    });
+  }
 
+  /**
+   * Login and get a JWT access token.
+   * NOTE: Uses OAuth2 form format (application/x-www-form-urlencoded), not JSON.
+   * This is required by FastAPI's OAuth2PasswordRequestForm on the backend.
+   */
+  async login(username: string, password: string): Promise<ApiResponse<{ access_token: string; token_type: string }>> {
+    // Build form-encoded body (not JSON!) — OAuth2 convention
+    const formData = new URLSearchParams();
+    formData.append('username', username);
+    formData.append('password', password);
+
+    return this.request('/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: formData.toString(),
+    });
+  }
+
+  /** Fetch current user's profile using the stored JWT. */
+  async getCurrentUser(): Promise<ApiResponse<User>> {
+    return this.request<User>('/auth/me');
+  }
+
+  /** Fetch any user's public profile by username. */
+  async getUserProfile(username: string): Promise<ApiResponse<User>> {
+    return this.request<User>(`/auth/user/${username}`);
+  }
+
+  /** Get total registered user count (shown in homepage footer). */
+  async getUserCount(): Promise<ApiResponse<{ count: number }>> {
+    return this.request<{ count: number }>('/auth/stats/count');
+  }
+
+
+  // ════════════════════════════════════════════════════════
+  // Bet Endpoints
+  // ════════════════════════════════════════════════════════
+
+  /**
+   * Fetch all public bets for the homepage feed.
+   * Returns bets with creator usernames and non-rejected challenges.
+   * The backend wraps results in a PaginatedResponse — we extract items.
+   */
+  async getPublicBets(): Promise<ApiResponse<Bet[]>> {
+    // Request the paginated response, then unwrap the items array
+    const response = await this.request<{ items: Bet[] }>('/bets/public?limit=100');
     if (response.data) {
-      // After registration, we need to login to get the token
-      // The backend doesn't return a token on registration, so we login
-      return this.login(username, password)
+      return { data: response.data.items };  // Unwrap pagination wrapper
     }
-
-    return response
+    return { error: response.error };
   }
 
-  async login(username: string, password: string) {
-    const formData = new URLSearchParams()
-    formData.append('username', username)
-    formData.append('password', password)
-
-    const headers: HeadersInit = {
-      'Content-Type': 'application/x-www-form-urlencoded',
+  /** Fetch current user's own bets (requires auth). */
+  async getBets(): Promise<ApiResponse<Bet[]>> {
+    const response = await this.request<{ items: Bet[] }>('/bets/?limit=100');
+    if (response.data) {
+      return { data: response.data.items };
     }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers,
-        body: formData,
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        return {
-          error: data.detail || `Error: ${response.statusText}`,
-        }
-      }
-
-      if (data.access_token) {
-        this.setToken(data.access_token)
-      }
-
-      return { data }
-    } catch (error) {
-      return {
-        error: error instanceof Error ? error.message : 'Network error occurred',
-      }
-    }
+    return { error: response.error };
   }
 
-  async getCurrentUser() {
-    return this.request<{
-      id: number
-      username: string
-      email: string
-      points: number
-      created_at: string
-    }>('/auth/me')
-  }
-
-  async getUserProfile(username: string) {
-    return this.request<{
-      id: number
-      username: string
-      email: string
-      points: number
-      created_at: string
-    }>(`/auth/user/${username}`)
-  }
-
-  logout() {
-    this.removeToken()
-  }
-
-  async getUserCount() {
-    return this.request<{ count: number }>('/auth/stats/count')
-  }
-
-  // Bet endpoints
-  async getPublicBets() {
-    // Public endpoint - no authentication required
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/bets/public`, {
-        method: 'GET',
-        headers,
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        return {
-          error: data.detail || `Error: ${response.statusText}`,
-        }
-      }
-
-      // Handle paginated response - extract items array
-      return { data: data.items || data }
-    } catch (error) {
-      return {
-        error: error instanceof Error ? error.message : 'Network error occurred',
-      }
-    }
-  }
-
-  async getBets() {
-    return this.request<
-      Array<{
-        id: number
-        user_id: number
-        amount: number
-        description: string | null
-        status: 'active' | 'won' | 'lost' | 'cancelled'
-        created_at: string
-        updated_at: string | null
-      }>
-    >('/bets/')
-  }
-
-  async getBet(betId: number) {
-    return this.request<{
-      id: number
-      user_id: number
-      amount: number
-      description: string | null
-      status: 'active' | 'won' | 'lost' | 'cancelled'
-      created_at: string
-      updated_at: string | null
-    }>(`/bets/${betId}`)
-  }
-
-  async createBet(title: string, criteria: string, amount: number, deadline: string) {
-    return this.request<{
-      id: number
-      user_id: number
-      title: string
-      amount: number
-      criteria: string
-      deadline: string
-      status: 'active' | 'won' | 'lost' | 'cancelled'
-      created_at: string
-      updated_at: string | null
-    }>('/bets/', {
+  /** Create a new bet with the given stake amount (deducts points from creator). */
+  async createBet(
+    title: string,
+    criteria: string,
+    amount: number,
+    deadline: string
+  ): Promise<ApiResponse<Bet>> {
+    return this.request<Bet>('/bets/', {
       method: 'POST',
       body: JSON.stringify({ title, criteria, amount, deadline }),
-    })
+    });
   }
 
-  async challengeBet(betId: number, amount: number) {
-    return this.request<{
-      id: number
-      bet_id: number
-      challenger_id: number
-      challenger_username: string
-      amount: number
-      status: 'pending' | 'accepted' | 'rejected'
-      created_at: string
-    }>(`/bets/${betId}/challenge`, {
+  /** Challenge a bet — stake points betting the creator will fail. */
+  async challengeBet(betId: number, amount: number): Promise<ApiResponse<Challenge>> {
+    return this.request<Challenge>(`/bets/${betId}/challenge`, {
       method: 'POST',
       body: JSON.stringify({ amount }),
-    })
+    });
   }
 
-  async updateBetStatus(betId: number, status: 'active' | 'won' | 'lost' | 'cancelled') {
-    return this.request<{
-      id: number
-      user_id: number
-      amount: number
-      description: string | null
-      status: 'active' | 'won' | 'lost' | 'cancelled'
-      created_at: string
-      updated_at: string | null
-    }>(`/bets/${betId}`, {
+  /** Update a bet's status (won/lost/cancelled). Only the creator can do this. */
+  async updateBetStatus(betId: number, status: string): Promise<ApiResponse<Bet>> {
+    return this.request<Bet>(`/bets/${betId}`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
-    })
+    });
+  }
+
+
+  // ════════════════════════════════════════════════════════
+  // Challenge Endpoints
+  // ════════════════════════════════════════════════════════
+
+  /** Accept a challenge on your bet (matches the challenger's stake). */
+  async acceptChallenge(betId: number, challengeId: number): Promise<ApiResponse<Challenge>> {
+    return this.request<Challenge>(`/bets/${betId}/challenges/${challengeId}/accept`, {
+      method: 'POST',
+    });
+  }
+
+  /** Reject a challenge on your bet (refunds the challenger). */
+  async rejectChallenge(betId: number, challengeId: number): Promise<ApiResponse<Challenge>> {
+    return this.request<Challenge>(`/bets/${betId}/challenges/${challengeId}/reject`, {
+      method: 'POST',
+    });
   }
 }
 
-export const apiService = new ApiService()
-
+// Singleton instance — import this anywhere as `apiService`
+export const apiService = new ApiService();

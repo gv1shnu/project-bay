@@ -1,4 +1,12 @@
-"""Bet CRUD endpoints: create, list, and get bets."""
+"""
+routers/bets/bet_crud.py — Bet CRUD endpoints: create, list, and get bets.
+
+Endpoints:
+  POST /bets/          — Create a new bet (requires auth + LLM validation)
+  GET  /bets/public    — List all bets with usernames and challenges (public feed)
+  GET  /bets/          — List current user's bets (requires auth)
+  GET  /bets/{bet_id}  — Get a single bet by ID
+"""
 import math
 from fastapi import APIRouter, Depends, Request, Query, status, HTTPException
 from sqlalchemy.orm import Session
@@ -30,10 +38,11 @@ async def create_bet_endpoint(
     db: Session = Depends(get_db)
 ):
     """Create a new bet with creator's initial stake."""
-    # Validate creator has enough points
+    # Step 1: Check the creator has enough points to stake
     validate_points(current_user, bet.amount)
     
-    # Validate first person perspective using LLM with regex fallback
+    # Step 2: Validate the title is a personal commitment using LLM (with regex fallback)
+    # This prevents bets like "Team A will win" — only allows "I will..." style commitments
     if not await is_personal(bet.title):
         raise HTTPException(
             status_code=400,
@@ -43,7 +52,7 @@ async def create_bet_endpoint(
             )
         )
     
-    # Create bet
+    # Step 3: Create the bet and deduct creator's stake
     db_bet = create_bet(db, current_user, bet)
     
     return db_bet
@@ -53,11 +62,11 @@ async def create_bet_endpoint(
 @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def get_public_bets(
     request: Request,
-    page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
+    page: int = Query(1, ge=1),           # Page number, starts at 1
+    limit: int = Query(20, ge=1, le=100), # Items per page, max 100
     db: Session = Depends(get_db)
 ):
-    """Get all bets with pagination and challenges (public endpoint)."""
+    """Get all bets with pagination and challenges (public feed — no auth needed)."""
     bets_with_data, total = get_public_bets_paginated(db, page, limit)
     
     return schemas.PaginatedResponse(
@@ -72,7 +81,7 @@ def get_bets(
     request: Request,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),  # Auth required
     db: Session = Depends(get_db)
 ):
     """Get all bets for the current user with pagination."""
@@ -91,5 +100,5 @@ def get_bet(
     bet_id: int,
     db: Session = Depends(get_db)
 ):
-    """Get a specific bet by ID."""
+    """Get a specific bet by ID. No auth required."""
     return get_bet_by_id(db, bet_id)

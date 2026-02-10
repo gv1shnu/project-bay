@@ -1,77 +1,67 @@
-import { Link, useNavigate } from 'react-router-dom'
-import { MouseEvent } from 'react'
+/**
+ * AuthPrompt.tsx — Sign-in/sign-up prompt modal.
+ *
+ * Displayed when an unauthenticated user tries to perform an action
+ * that requires login (e.g., creating a bet or challenging someone).
+ * Offers navigation to login or signup pages.
+ */
+import { useNavigate } from 'react-router-dom';
 
 interface AuthPromptProps {
-  onClose: () => void
+  onClose: () => void;        // Callback to close the modal
+  message?: string;           // Optional custom prompt message
 }
 
-export default function AuthPrompt({ onClose }: AuthPromptProps) {
-  const navigate = useNavigate()
-
-  const handleBackdropClick = (e: MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
-      onClose()
-    }
-  }
-
-  const handleLoginClick = () => {
-    navigate('/login')
-    onClose()
-  }
-
-  const handleSignupClick = () => {
-    navigate('/signup')
-    onClose()
-  }
+export default function AuthPrompt({ onClose, message }: AuthPromptProps) {
+  const navigate = useNavigate();
 
   return (
-    <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-      onClick={handleBackdropClick}
-    >
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 transform transition-all">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-3xl font-bold bg-gradient-to-r from-competitive-dark to-friendly-dark bg-clip-text text-transparent">
-            Sign In Required
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors text-3xl font-light leading-none"
-            aria-label="Close"
-          >
-            ×
-          </button>
+    // Full-screen backdrop — clicking it closes the modal
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      {/* Modal card — stop propagation so clicking inside doesn't close it */}
+      <div
+        className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Bay logo/icon */}
+        <div className="flex justify-center mb-6">
+          <div className="bg-competitive-100 rounded-full p-4">
+            <svg className="w-8 h-8 text-competitive-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
         </div>
 
-        <p className="text-gray-600 mb-6">
-          You need to be signed in to challenge a bet. Sign in to your account or create a new one to get started!
+        {/* Prompt message */}
+        <h2 className="text-2xl font-bold text-gray-900 mb-3">Join the Bay</h2>
+        <p className="text-gray-600 mb-8 text-lg">
+          {message || 'Sign in to create bets, challenge others, and start competing!'}
         </p>
 
+        {/* Action buttons — navigate to auth pages */}
         <div className="space-y-3">
           <button
-            onClick={handleLoginClick}
-            className="w-full px-6 py-3 bg-gradient-to-r from-competitive-dark to-competitive-DEFAULT text-white rounded-lg font-semibold hover:from-competitive-DEFAULT hover:to-competitive-light transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+            onClick={() => navigate('/login')}
+            className="w-full py-3 bg-competitive-500 text-white rounded-xl font-semibold hover:bg-competitive-600 transition-colors"
           >
             Sign In
           </button>
           <button
-            onClick={handleSignupClick}
-            className="w-full px-6 py-3 bg-gradient-to-r from-friendly-dark to-friendly-DEFAULT text-white rounded-lg font-semibold hover:from-friendly-DEFAULT hover:to-friendly-light transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+            onClick={() => navigate('/signup')}
+            className="w-full py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
           >
             Create Account
           </button>
         </div>
 
-        <div className="mt-6 text-center">
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 text-sm transition-colors"
-          >
-            Cancel
-          </button>
-        </div>
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="mt-6 text-gray-400 hover:text-gray-600 text-sm transition-colors"
+        >
+          Maybe later
+        </button>
       </div>
     </div>
-  )
+  );
 }
-

@@ -1,4 +1,14 @@
-"""Challenge endpoints: create, list, accept, and reject challenges."""
+"""
+routers/bets/challenges.py — Challenge endpoints.
+
+Endpoints:
+  POST /bets/{id}/challenge                    — Stake points against someone's bet
+  GET  /bets/{id}/challenges                   — List all challenges for a bet
+  POST /bets/{id}/challenges/{cid}/accept      — Bet creator accepts a challenge
+  POST /bets/{id}/challenges/{cid}/reject      — Bet creator rejects (refunds challenger)
+
+All mutations require authentication. Only the bet creator can accept/reject.
+"""
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 from slowapi import Limiter
@@ -24,10 +34,13 @@ def create_challenge_endpoint(
     request: Request,
     bet_id: int,
     challenge: schemas.ChallengeCreate,
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),  # Must be logged in
     db: Session = Depends(get_db)
 ):
-    """Challenge a bet (stakes points betting against the creator)."""
+    """
+    Challenge a bet — stake your points betting that the creator will fail.
+    Points are deducted immediately. Cannot challenge your own bet.
+    """
     return create_challenge(db, current_user, bet_id, challenge)
 
 
@@ -38,7 +51,7 @@ def get_challenges(
     bet_id: int,
     db: Session = Depends(get_db)
 ):
-    """Get all challenges for a bet."""
+    """Get all challenges for a bet. Public endpoint — no auth required."""
     return get_challenges_for_bet(db, bet_id)
 
 
@@ -51,7 +64,11 @@ def accept_challenge_endpoint(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Accept a challenge (bet creator matches the stake)."""
+    """
+    Accept a challenge — only the bet creator can do this.
+    Creator must match the challenger's stake (deducted from creator's points).
+    The bet's total amount increases accordingly.
+    """
     return accept_challenge(db, current_user, bet_id, challenge_id)
 
 
@@ -64,5 +81,8 @@ def reject_challenge_endpoint(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Reject a challenge (refunds challenger's stake)."""
+    """
+    Reject a challenge — only the bet creator can do this.
+    The challenger gets their staked points refunded.
+    """
     return reject_challenge(db, current_user, bet_id, challenge_id)

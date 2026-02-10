@@ -1,11 +1,17 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
+/**
+ * main.tsx — React application entry point.
+ *
+ * Renders the root <App /> component into the #root div (defined in index.html).
+ * StrictMode enables extra warnings during development (e.g., detecting side effects).
+ */
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import './index.css'     // Global styles (Tailwind CSS base + custom)
 import App from './App.tsx'
-import './index.css'
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
+// Mount the React app to the DOM — this is the single entry point for the entire UI
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
     <App />
-  </React.StrictMode>,
+  </StrictMode>,
 )
-

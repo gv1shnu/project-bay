@@ -1,3 +1,15 @@
+/**
+ * BetCard.tsx — Displays a single bet in the public feed.
+ *
+ * Shows: title, creator avatar, status badge, total stake, challengers,
+ * success criteria, and action buttons (Challenge / Dismiss).
+ *
+ * Key behavior:
+ *   - Hides Challenge button on your own bets (shows "Your bet" instead)
+ *   - Only shows Challenge on active bets (not resolved/cancelled)
+ *   - Clicking a username avatar navigates to their profile page
+ *   - Total stake = creator's amount + all active (accepted+pending) challenges
+ */
 import { useNavigate } from 'react-router-dom'
 import { Bet } from '../types'
 import { getAvatarUrl } from '../utils/avatar'
@@ -5,14 +17,18 @@ import { useAuth } from '../contexts/AuthContext'
 
 interface BetCardProps {
   bet: Bet
-  onChallenge: () => void
-  onDismiss: () => void
+  onChallenge: () => void    // Called when "Challenge" button is clicked
+  onDismiss: () => void      // Called when "Dismiss" or ✕ button is clicked
 }
 
 export default function BetCard({ bet, onChallenge, onDismiss }: BetCardProps) {
   const navigate = useNavigate()
   const { user } = useAuth()
+
+  // Check if this bet belongs to the current user (hide challenge button if so)
   const isOwnBet = user?.username === bet.username
+
+  /** Format a date string into a readable short format (e.g., "Jan 5, 02:30 PM") */
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleDateString('en-US', {
@@ -23,32 +39,34 @@ export default function BetCard({ bet, onChallenge, onDismiss }: BetCardProps) {
     })
   }
 
+  /** Map bet status to Tailwind color classes for the status badge */
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'won':
-        return 'bg-friendly-light text-friendly-dark'
-      case 'lost':
-        return 'bg-red-100 text-red-700'
-      case 'cancelled':
-        return 'bg-gray-100 text-gray-700'
-      default:
-        return 'bg-yellow-100 text-yellow-700'
+      case 'won': return 'bg-friendly-light text-friendly-dark'   // Green
+      case 'lost': return 'bg-red-100 text-red-700'                // Red
+      case 'cancelled': return 'bg-gray-100 text-gray-700'              // Gray
+      default: return 'bg-yellow-100 text-yellow-700'          // Yellow (active)
     }
   }
 
+  // Filter challenges by status for display
   const acceptedChallenges = bet.challenges?.filter(c => c.status === 'accepted') || []
   const allActiveChallenges = bet.challenges?.filter(c => c.status === 'accepted' || c.status === 'pending') || []
+
+  // Calculate total points at stake (creator + all active challengers)
   const challengerStakes = allActiveChallenges.reduce((sum, c) => sum + c.amount, 0)
-  const totalStake = bet.amount + challengerStakes  // Creator's stake + all active challengers
+  const totalStake = bet.amount + challengerStakes
 
   return (
     <div className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden border-2 border-gray-100">
       <div className="p-6">
+        {/* ── Header: Title + Creator info + Status badge ── */}
         <div className="flex justify-between items-start mb-4">
           <div className="flex-1 pr-2">
             <h2 className="text-xl font-bold text-gray-800 mb-2">
               {bet.title}
             </h2>
+            {/* Creator's avatar + username (clickable → navigates to profile) */}
             {bet.username && (
               <div className="flex items-center gap-2 mb-2">
                 <button
@@ -67,10 +85,12 @@ export default function BetCard({ bet, onChallenge, onDismiss }: BetCardProps) {
                 </span>
               </div>
             )}
+            {/* Color-coded status badge */}
             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(bet.status)}`}>
               {bet.status.toUpperCase()}
             </span>
           </div>
+          {/* Dismiss button (top-right ✕) */}
           <button
             onClick={onDismiss}
             className="text-gray-400 hover:text-gray-600 transition-colors text-xl font-bold"
@@ -81,13 +101,13 @@ export default function BetCard({ bet, onChallenge, onDismiss }: BetCardProps) {
         </div>
 
         <div className="space-y-3 mb-4">
-          {/* Stakes info */}
+          {/* ── Total stake display ── */}
           <div className="flex items-center justify-between bg-competitive-light/20 rounded-lg p-3">
             <span className="text-sm font-semibold text-gray-600">Total at Stake:</span>
             <span className="text-xl font-bold text-competitive-dark">{totalStake} points</span>
           </div>
 
-          {/* Challengers */}
+          {/* ── Accepted challengers list (with avatars and amounts) ── */}
           {acceptedChallenges.length > 0 && (
             <div className="bg-gray-50 rounded-lg p-3">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
@@ -111,17 +131,19 @@ export default function BetCard({ bet, onChallenge, onDismiss }: BetCardProps) {
             </div>
           )}
 
-          {/* Criteria */}
+          {/* ── Success criteria ── */}
           <div className="bg-gray-50 rounded-lg p-3">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Success Criteria:</span>
             <p className="text-sm text-gray-700 mt-1">{bet.criteria}</p>
           </div>
 
+          {/* ── Creation timestamp ── */}
           <div className="flex items-center text-xs text-gray-400">
             <span>{formatDate(bet.created_at)}</span>
           </div>
         </div>
 
+        {/* ── Action buttons ── */}
         <div className="flex gap-3">
           {!isOwnBet && (
             <>
@@ -131,6 +153,7 @@ export default function BetCard({ bet, onChallenge, onDismiss }: BetCardProps) {
               >
                 Dismiss
               </button>
+              {/* Only show Challenge button on active bets */}
               {bet.status === 'active' && (
                 <button
                   onClick={onChallenge}
@@ -141,6 +164,7 @@ export default function BetCard({ bet, onChallenge, onDismiss }: BetCardProps) {
               )}
             </>
           )}
+          {/* Show "Your bet" label instead of action buttons on user's own bets */}
           {isOwnBet && (
             <span className="text-sm text-gray-400 italic">Your bet</span>
           )}
