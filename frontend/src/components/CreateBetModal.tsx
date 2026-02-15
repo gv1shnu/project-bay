@@ -9,7 +9,7 @@
  *   - Amount must be > 0 and ≤ user's available points
  *   - Deadline must be in the future
  *
- * NOTE: The backend also validates the title with the LLM to ensure
+ * NOTE: The backend also validates the title with regex to ensure
  * it's a personal commitment (e.g., "I will..."), which may return
  * an additional error after submission.
  */

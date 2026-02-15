@@ -10,12 +10,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from app.database import engine, Base
+from app.database import engine, Base, SessionLocal
 from app.routers import auth
 from app.routers.bets import router as bets_router
+from app.routers.admin import router as admin_router
 from app.config import settings
 from app.logging_config import setup_logging, get_logger
 from app.exceptions import BettingAPIException, betting_api_exception_handler
+from app.seed import run_seed
 
 # Initialize logging before anything else so all modules get the configured logger
 setup_logging(level=settings.LOG_LEVEL, format_type=settings.LOG_FORMAT)
@@ -28,6 +30,14 @@ async def lifespan(app: FastAPI):
     # Auto-create all tables defined in models.py (safe to call repeatedly)
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables created")
+
+    # Seed demo data on first run (skips if data already exists)
+    db = SessionLocal()
+    try:
+        run_seed(db)
+    finally:
+        db.close()
+
     logger.info("Application startup complete")
     
     yield  # App runs here — everything above is startup, below is shutdown
@@ -74,6 +84,7 @@ app.add_middleware(
 # Mount route groups — /auth/* and /bets/*
 app.include_router(auth.router)
 app.include_router(bets_router)
+app.include_router(admin_router)
 
 
 @app.get("/")

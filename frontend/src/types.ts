@@ -46,4 +46,5 @@ export interface User {
   email: string;
   username: string;
   points: number;   // In-app currency balance
+  created_at?: string; // ISO date string (available in admin responses)
 }

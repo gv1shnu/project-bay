@@ -218,6 +218,21 @@ class ApiService {
       method: 'POST',
     });
   }
+
+
+  // ════════════════════════════════════════════════════════
+  // Admin Endpoints
+  // ════════════════════════════════════════════════════════
+
+  /** Fetch all users for the admin dashboard. */
+  async getAdminUsers(): Promise<ApiResponse<User[]>> {
+    return this.request<User[]>('/admin/users');
+  }
+
+  /** Fetch all bets with challenges for the admin dashboard. */
+  async getAdminBets(): Promise<ApiResponse<Bet[]>> {
+    return this.request<Bet[]>('/admin/bets');
+  }
 }
 
 // Singleton instance — import this anywhere as `apiService`

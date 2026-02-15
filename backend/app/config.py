@@ -31,8 +31,6 @@ class Settings(BaseSettings):
         "case_sensitive": True    # Env var names are case-sensitive
     }
 
-    # --- External Services ---
-    LLAMA_API_URL: str                        # Ollama API URL (e.g. http://localhost:11434)
 
 
 # Singleton instance — import this everywhere as `from app.config import settings`

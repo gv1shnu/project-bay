@@ -13,6 +13,7 @@ import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import HomePage from './pages/HomePage';
 import ProfilePage from './pages/ProfilePage';
+import AdminPage from './pages/AdminPage';
 
 function App() {
   return (
@@ -29,6 +30,9 @@ function App() {
 
           {/* Main feed — shows all public bets */}
           <Route path="/" element={<HomePage />} />
+
+          {/* Admin dashboard — view all users and bets */}
+          <Route path="/admin" element={<AdminPage />} />
 
           {/* Catch-all — redirect unknown paths to home */}
           <Route path="*" element={<Navigate to="/" replace />} />
