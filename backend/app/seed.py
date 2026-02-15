@@ -26,42 +26,42 @@ SEED_USERS = [
 ]
 
 # 10 bets with varied statuses
-# (user_index, title, criteria, amount, days_offset, status)
+# (user_index, title, criteria, amount, days_offset, status, stars)
 #   days_offset: positive = future deadline, negative = past deadline
 SEED_BETS = [
     # ── Active bets (open for challenges) ──
     (0, "I will read 30 pages every day this week",
-     "Photo of book with page number", 3, 7, BetStatus.ACTIVE),
+     "Photo of book with page number", 3, 7, BetStatus.ACTIVE, 7),
 
     (1, "I will cook homemade meals every day this week",
-     "Photo of each meal before eating", 3, 7, BetStatus.ACTIVE),
+     "Photo of each meal before eating", 3, 7, BetStatus.ACTIVE, 3),
 
     (2, "I will practice guitar for 30 minutes daily",
-     "Short daily video clip of practice session", 3, 21, BetStatus.ACTIVE),
+     "Short daily video clip of practice session", 3, 21, BetStatus.ACTIVE, 5),
 
     # ── Won bets (creator completed their commitment) ──
     (0, "I will complete a 5K run this weekend",
-     "Screenshot from fitness tracking app", 4, -3, BetStatus.WON),
+     "Screenshot from fitness tracking app", 4, -3, BetStatus.WON, 12),
 
     (1, "I will finish my online course by month end",
-     "Certificate of completion screenshot", 4, -5, BetStatus.WON),
+     "Certificate of completion screenshot", 4, -5, BetStatus.WON, 9),
 
     # ── Lost bets (creator failed) ──
     (2, "I will do 50 push-ups every morning for two weeks",
-     "Video proof of daily push-ups", 5, -14, BetStatus.LOST),
+     "Video proof of daily push-ups", 5, -14, BetStatus.LOST, 8),
 
     (0, "I will wake up before 6 AM for 5 days straight",
-     "Screenshot of alarm log from phone", 5, -7, BetStatus.LOST),
+     "Screenshot of alarm log from phone", 5, -7, BetStatus.LOST, 4),
 
     # ── Cancelled bets (creator cancelled, everyone refunded) ──
     (1, "I will meditate for 15 minutes daily for 10 days",
-     "Screenshot from meditation app streak", 5, -2, BetStatus.CANCELLED),
+     "Screenshot from meditation app streak", 5, -2, BetStatus.CANCELLED, 2),
 
     (2, "I will not spend money on junk food for a month",
-     "Bank statement showing no fast food charges", 4, -1, BetStatus.CANCELLED),
+     "Bank statement showing no fast food charges", 4, -1, BetStatus.CANCELLED, 1),
 
     (0, "I will write 500 words in my journal every day",
-     "Photo of journal page with date", 3, 14, BetStatus.ACTIVE),
+     "Photo of journal page with date", 3, 14, BetStatus.ACTIVE, 6),
 ]
 
 # Challenges linking users to other users' bets
@@ -118,7 +118,7 @@ def run_seed(db: Session) -> None:
     # ── Create bets ──
     now = datetime.now(timezone.utc)
     bets = []
-    for user_idx, title, criteria, amount, days_offset, bet_status in SEED_BETS:
+    for user_idx, title, criteria, amount, days_offset, bet_status, stars in SEED_BETS:
         bet = Bet(
             user_id=users[user_idx].id,
             title=title,
@@ -126,6 +126,7 @@ def run_seed(db: Session) -> None:
             amount=amount,
             deadline=now + timedelta(days=days_offset),
             status=bet_status,
+            stars=stars,
         )
         db.add(bet)
         bets.append(bet)

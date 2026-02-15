@@ -102,3 +102,18 @@ def get_bet(
 ):
     """Get a specific bet by ID. No auth required."""
     return get_bet_by_id(db, bet_id)
+
+
+@router.post("/{bet_id}/star")
+@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+def star_bet(
+    request: Request,
+    bet_id: int,
+    db: Session = Depends(get_db)
+):
+    """Increment a bet's star count. No auth required."""
+    bet = get_bet_by_id(db, bet_id)
+    bet.stars = (bet.stars or 0) + 1
+    db.commit()
+    db.refresh(bet)
+    return {"id": bet.id, "stars": bet.stars}
