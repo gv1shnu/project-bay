@@ -12,7 +12,6 @@ Project BAY is a social challenge platform where users stake personal commitment
 Frontend: React, Typescript, Vite
 Backend:  FastAPI, Python v3.14
 Database: Postgres (via Docker)
-LLM:      Llama v3.2 1b (via Docker)
 ```
 
 ## Setup
@@ -138,98 +137,6 @@ project-bay/
 └── README.md
 ```
 
-<sub><em>view in browser</em></sub>
-
-## Database Architecture (ER Diagram)
-
-```mermaid
-erDiagram
-    USER ||--o{ BET : creates
-    USER ||--o{ CHALLENGE : makes
-    BET ||--o{ CHALLENGE : "has challenges"
-
-    USER {
-        int id PK
-        string username UK
-        string email UK
-        string hashed_password
-        int points
-        datetime created_at
-        datetime updated_at
-    }
-
-    BET {
-        int id PK
-        int user_id FK
-        string title
-        int amount
-        string criteria
-        datetime deadline
-        string status
-        datetime created_at
-        datetime updated_at
-    }
-
-    CHALLENGE {
-        int id PK
-        int bet_id FK
-        int challenger_id FK
-        int amount
-        string status
-        datetime created_at
-    }
-```
-
-## Webapp Architecture
-
-```mermaid
-graph TB
-    subgraph Frontend["Frontend - React/TypeScript"]
-        UI["UI Components<br/>- BetCard<br/>- CreateBetModal<br/>- ChallengeOverlay"]
-        Auth["Auth Module<br/>- LoginPage<br/>- SignupPage<br/>- ProtectedRoute"]
-        Context["AuthContext<br/>User State & Auth"]
-        Pages["Pages<br/>- HomePage<br/>- ProfilePage"]
-    end
-
-    subgraph Backend["Backend - FastAPI"]
-        API["API Routes<br/>- /auth/*<br/>- /bets/*"]
-        AuthSvc["Auth Service<br/>- JWT Tokens<br/>- Password Hashing"]
-        BetSvc["Bet Service<br/>- Bet CRUD<br/>- Challenge Logic"]
-        Validation["Validation Layer<br/>- Email Domain<br/>- Personal Perspective<br/>- Input Validation"]
-    end
-
-    subgraph Database["PostgreSQL Database"]
-        UserTbl["Users Table"]
-        BetTbl["Bets Table"]
-        ChallengeTbl["Challenges Table"]
-    end
-
-    subgraph External["External Services"]
-        LLM["Llama 3.2 1B<br/>- Proof Evaluation<br/>- Judgment"]
-    end
-
-    Client["Web Browser"]
-    
-    Client -->|HTTP/REST| Frontend
-    UI --> Context
-    Auth --> Context
-    Pages --> Context
-    Frontend -->|API Calls| API
-    API --> AuthSvc
-    API --> BetSvc
-    BetSvc --> Validation
-    AuthSvc --> UserTbl
-    BetSvc --> BetTbl
-    BetSvc --> ChallengeTbl
-    BetSvc -.->|evaluation| LLM
-    
-    style Frontend fill:#61dafb,color:#000
-    style Backend fill:#90c53f,color:#000
-    style Database fill:#336791,color:#fff
-    style External fill:#ffd700,color:#000
-    style Client fill:#f0f0f0,color:#000
-```
-
 ## Bottlenecks
 
 - Single API instance (no load balancing)
@@ -244,12 +151,6 @@ graph TB
     Current: Every request hits the database
     Impact: Redundant queries, slower response times
     Solution: Cache user profiles, bet listings, in Redis. It'll reduce db load by 40%.
-    ```
-- Llama - too slow
-    ```text
-        Current: Synchronous blocking calls (2-10 seconds)
-        Impact: Request hangs while waiting for LLM evaluation
-        Solution: Add calls to queue instead of blocking
     ```
 - Single server architecture
     ```text

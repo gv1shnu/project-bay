@@ -2,7 +2,7 @@
 routers/bets/bet_crud.py — Bet CRUD endpoints: create, list, and get bets.
 
 Endpoints:
-  POST /bets/          — Create a new bet (requires auth + LLM validation)
+  POST /bets/          — Create a new bet (requires auth + regex validation)
   GET  /bets/public    — List all bets with usernames and challenges (public feed)
   GET  /bets/          — List current user's bets (requires auth)
   GET  /bets/{bet_id}  — Get a single bet by ID
@@ -41,9 +41,9 @@ async def create_bet_endpoint(
     # Step 1: Check the creator has enough points to stake
     validate_points(current_user, bet.amount)
     
-    # Step 2: Validate the title is a personal commitment using LLM (with regex fallback)
+    # Step 2: Validate the title is a personal commitment using regex pattern matching
     # This prevents bets like "Team A will win" — only allows "I will..." style commitments
-    if not await is_personal(bet.title):
+    if not is_personal(bet.title):
         raise HTTPException(
             status_code=400,
             detail=(
