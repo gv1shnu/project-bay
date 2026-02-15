@@ -16,6 +16,7 @@ export interface Bet {
   amount: number;          // Creator's total matched stake (grows when challenges are accepted)
   criteria: string;        // How success will be measured
   status: string;          // "active" | "won" | "lost" | "cancelled"
+  stars: number;           // Number of stars (likes)
   deadline: string;        // ISO date string for the bet deadline
   created_at: string;      // ISO date string
   username?: string;       // Creator's username (only present in public feed responses)

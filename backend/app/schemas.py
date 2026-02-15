@@ -117,6 +117,7 @@ class BetResponse(BetBase):
     amount: int       # Total matched stake (increases when challenges are accepted)
     deadline: datetime
     status: BetStatus
+    stars: int = 0    # Number of stars (likes)
     created_at: datetime
     updated_at: Optional[datetime] = None
 

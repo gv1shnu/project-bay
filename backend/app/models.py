@@ -59,6 +59,7 @@ class Bet(Base):
     criteria = Column(String, nullable=False)                            # How success will be measured
     deadline = Column(DateTime(timezone=True), nullable=False)           # When the bet expires
     status = Column(Enum(BetStatus), default=BetStatus.ACTIVE, nullable=False)  # Current lifecycle state
+    stars = Column(Integer, default=0, nullable=False)                           # Number of stars (likes)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

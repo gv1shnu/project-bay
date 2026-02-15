@@ -19,9 +19,10 @@ interface BetCardProps {
   bet: Bet
   onChallenge: () => void    // Called when "Challenge" button is clicked
   onDismiss: () => void      // Called when "Dismiss" or ✕ button is clicked
+  onStar: () => void         // Called when "Star" button is clicked
 }
 
-export default function BetCard({ bet, onChallenge, onDismiss }: BetCardProps) {
+export default function BetCard({ bet, onChallenge, onDismiss, onStar }: BetCardProps) {
   const navigate = useNavigate()
   const { user } = useAuth()
 
@@ -138,8 +139,23 @@ export default function BetCard({ bet, onChallenge, onDismiss }: BetCardProps) {
           </div>
 
           {/* ── Creation timestamp ── */}
-          <div className="flex items-center text-xs text-gray-400">
+          <div className="flex items-center justify-between text-xs text-gray-400">
             <span>{formatDate(bet.created_at)}</span>
+            {/* ── Star button ── */}
+            <button
+              onClick={onStar}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-yellow-50 hover:bg-yellow-100 text-yellow-600 hover:text-yellow-700 transition-all active:scale-125 group"
+              title="Star this bet"
+            >
+              <svg
+                className="w-4 h-4 transition-transform group-hover:scale-110"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </svg>
+              <span className="text-sm font-semibold">{bet.stars || 0}</span>
+            </button>
           </div>
         </div>
 

@@ -44,15 +44,15 @@ pip install -r requirements.txt
 
 ## To do
 
-- [x] add cancel button
-- [ ] add star button to card
-- [ ] sort the feed by stars
 - [ ] friends network
-- [ ] proof submission to AI
-- [ ] configuring AI as judge
+- [ ] proof upload
+- [ ] configuring POC
 - [ ] win/loss decision
+- [x] add star button to card
+- [x] sort the feed by stars
 - [x] credit/refund points
-- [ ] Create an admin page
+- [x] add cancel button
+- [x] Create an admin page
 - [x] profile page
 - [x] add deadline to card
 - [x] Search functionality
@@ -74,12 +74,14 @@ project-bay/
 │   │   ├── main.py                # FastAPI app entrypoint
 │   │   ├── models.py              # SQLAlchemy models
 │   │   ├── schemas.py             # Pydantic request/response schemas
+│   │   ├── seed.py                # Database seeding (demo data on first run)
 │   │   ├── routers/               # FastAPI HTTP layer
 │   │   │   ├── __init__.py
+│   │   │   ├── admin.py           # Admin dashboard endpoints
 │   │   │   ├── auth.py            # Authentication endpoints
 │   │   │   └── bets/              # Bet management endpoints
 │   │   │       ├── __init__.py
-│   │   │       ├── bet_crud.py    # Bet CRUD operations
+│   │   │       ├── bet_crud.py    # Bet CRUD + star operations
 │   │   │       ├── challenges.py  # Challenge logic
 │   │   │       └── resolution.py  # Bet resolution logic
 │   │   ├── services/              # Business logic layer
@@ -102,14 +104,15 @@ project-bay/
 ├── frontend/
 │   ├── src/
 │   │   ├── components/            # Reusable UI components
-│   │   │   ├── AuthPrompt.tsx     # Authentication prompts
-│   │   │   ├── BetCard.tsx        # Bet display card
+│   │   │   ├── AuthPrompt.tsx     # Sign-in / create account prompt
+│   │   │   ├── BetCard.tsx        # Bet display card with star button
 │   │   │   ├── ChallengeOverlay.tsx # Challenge interaction overlay
-│   │   │   ├── CreateBetModal.tsx # Bet creation modal
+│   │   │   ├── CreateBetModal.tsx  # Bet creation modal
 │   │   │   └── ProtectedRoute.tsx # Route protection wrapper
 │   │   ├── contexts/              # React context providers
 │   │   │   └── AuthContext.tsx    # Global authentication state
 │   │   ├── pages/                 # Route-level pages
+│   │   │   ├── AdminPage.tsx      # Admin dashboard (users & bets)
 │   │   │   ├── HomePage.tsx       # Main feed & bets display
 │   │   │   ├── LoginPage.tsx      # Login page
 │   │   │   ├── ProfilePage.tsx    # User profile page

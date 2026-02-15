@@ -200,6 +200,13 @@ class ApiService {
     });
   }
 
+  /** Star a bet — increments its star count. No auth required. */
+  async starBet(betId: number): Promise<ApiResponse<{ id: number; stars: number }>> {
+    return this.request<{ id: number; stars: number }>(`/bets/${betId}/star`, {
+      method: 'POST',
+    });
+  }
+
 
   // ════════════════════════════════════════════════════════
   // Challenge Endpoints

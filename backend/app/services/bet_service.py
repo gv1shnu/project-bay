@@ -101,8 +101,9 @@ def get_public_bets_paginated(
     offset = (page - 1) * limit
     total = db.query(models.Bet).count()
     
-    # Fetch bets ordered by newest first
+    # Fetch bets ordered by most stars first, then newest
     bets = db.query(models.Bet).order_by(
+        models.Bet.stars.desc(),
         models.Bet.created_at.desc()
     ).offset(offset).limit(limit).all()
     
@@ -119,7 +120,7 @@ def get_public_bets_paginated(
         ]
         bets_with_data.append(schemas.BetWithUsername(
             id=bet.id, user_id=bet.user_id, title=bet.title, amount=bet.amount,
-            criteria=bet.criteria, status=bet.status, created_at=bet.created_at,
+            criteria=bet.criteria, status=bet.status, stars=bet.stars, created_at=bet.created_at,
             updated_at=bet.updated_at, username=bet.user.username, challenges=challenges, deadline=bet.deadline
         ))
     

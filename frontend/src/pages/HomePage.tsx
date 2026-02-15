@@ -35,9 +35,11 @@ export default function HomePage() {
   const { user, logout, isAuthenticated, refreshUser } = useAuth()
   const [createBetError, setCreateBetError] = useState<string | null>(null)  // Error from create bet API
 
-  // Fetch bets on component mount
+  // Fetch bets on mount + auto-refresh every 30 seconds
   useEffect(() => {
     fetchBets()
+    const interval = setInterval(fetchBets, 30000)
+    return () => clearInterval(interval)
   }, [])
 
   /** Fetch all public bets and user count from the API */
@@ -125,6 +127,17 @@ export default function HomePage() {
     }
   }
 
+  /** Handle star button — increment star count and refresh (optimistic update) */
+  const handleStar = async (betId: number) => {
+    // Optimistic update: increment locally first for instant feedback
+    setBets(prev => prev.map(b => b.id === betId ? { ...b, stars: (b.stars || 0) + 1 } : b))
+    const response = await apiService.starBet(betId)
+    if (!response.data) {
+      // Revert on failure
+      setBets(prev => prev.map(b => b.id === betId ? { ...b, stars: (b.stars || 0) - 1 } : b))
+    }
+  }
+
   /** Handle Create Bet button — show auth prompt if not logged in */
   const handleCreateBetClick = () => {
     if (!isAuthenticated) {
@@ -185,6 +198,12 @@ export default function HomePage() {
                     className="px-4 py-2 bg-gradient-to-r from-competitive-dark to-competitive-DEFAULT text-white rounded-lg font-semibold hover:from-competitive-DEFAULT hover:to-competitive-light transition-all shadow-md"
                   >
                     Sign In
+                  </a>
+                  <a
+                    href="/signup"
+                    className="px-4 py-2 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                  >
+                    Sign Up
                   </a>
                 </div>
               )}
@@ -255,6 +274,7 @@ export default function HomePage() {
                   bet={bet}
                   onChallenge={() => handleChallengeClick(bet.id)}
                   onDismiss={() => handleDismiss(bet.id)}
+                  onStar={() => handleStar(bet.id)}
                 />
               ))}
             </div>
