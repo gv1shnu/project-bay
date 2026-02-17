@@ -1,170 +1,167 @@
 # Project BAY
 
-Project BAY is a social challenge platform where users stake personal commitments against friends using their points.
+![Python](https://img.shields.io/badge/python-3.12+-blue.svg)
+![React](https://img.shields.io/badge/react-18.2-61DAFB.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688.svg)
+![Postgres](https://img.shields.io/badge/postgres-16-336791.svg)
+
+**Project BAY** is a social challenge platform where users stake personal commitments against friends using a virtual points system. Prove your discipline, challenge your friends, and track your wins.
 
 ## Demo
 
--- add screenshot here
+<table>
+  <tr>
+    <td align="center" width="70%">
+      <img src="./images/screenshot-desktop.png" alt="Desktop View" width="100%">
+      <br>Desktop View
+    </td>
+    <td align="center" width="30%">
+      <img src="./images/screenshot-mobile.png" alt="Mobile View" width="100%">
+      <br>Mobile View
+    </td>
+  </tr>
+</table>
 
-## Tech stack
+---
+
+## Features
+
+- **Personal Commitments** — Set measurable goals (e.g., "Run 5k", "Read 30 pages")
+- **Social Challenges** — Friends can bet points that you *won't* follow through
+- **Star System** — Community-curated feed sorted by popularity
+- **Admin Dashboard** — View all users and bets for platform management
+- **User Profiles** — Track wins, losses, and active challenges
+- **Validation** — Regex-based commitment validation ensuring quality bets
+
+## Tech Stack
 
 ```
-Frontend: React, Typescript, Vite
-Backend:  FastAPI, Python v3.14
-Database: Postgres (via Docker)
+Frontend: React, TypeScript, Vite, Tailwind CSS
+Backend:  FastAPI, SQLAlchemy, Pydantic
+Database: PostgreSQL (via Docker)
+Auth:     JWT (OAuth2 password flow)
 ```
 
-## Setup
+---
 
-### Install Dependencies
+## Getting Started
 
-```bash
-cd frontend && npm install
-```
+### Prerequisites
+- Docker & Docker Compose
+- Node.js v18+
+- Python 3.12+
 
-```bash
-cd backend
-python -m venv venv
-source venv/scripts/activate
-docker-compose up -d
-pip install -r requirements.txt
-```
+### Installation
 
-## Running locally
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/gv1shnu/project-bay.git
+   cd project-bay
+   ```
+
+2. **Backend**
+   ```bash
+   cd backend
+   python -m venv venv
+   venv\Scripts\activate            # Windows
+   source venv/bin/activate       # Mac/Linux
+
+   pip install -r requirements.txt        (production)
+   pip install -r requirements-dev.txt    (local)
+
+   docker-compose up -d
+   ```
+
+3. **Frontend**
+   ```bash
+   cd frontend && npm install
+   ```
+
+### Running the Application
 
 1. Start the backend server:
    ```bash
-   uvicorn app.main:app
+   gunicorn -k uvicorn.workers.UvicornWorker -w 4 main:app    (production)
+   uvicorn app.main:app --reload                               (local)
    ```
 
 2. Start the frontend (in a separate terminal):
    ```bash
-   npm run dev
+   npm run build    (production)
+   npm run dev      (local)
    ```
 
-## To do
+### Default Credentials (Seed Data)
 
-- [ ] friends network
-- [ ] proof upload
-- [ ] configuring POC
-- [ ] win/loss decision
-- [x] add star button to card
-- [x] sort the feed by stars
-- [x] credit/refund points
-- [x] add cancel button
+The application automatically seeds demo data on the first run.
+
+| Username   | Password       |
+|------------|----------------|
+| **alex**   | `***********`  |
+| **jordan** | `***********`  |
+| **sam**    | `***********`  |
+
+Admin Dashboard: `/admin`
+
+---
+
+## To Do
+
+- [ ] Friends network
+- [ ] Proof upload
+- [ ] Configuring POC
+- [ ] Win/loss decision
+- [ ] Abuse prevention (using LLM)
+- [x] Add star button to card
+- [x] Sort the feed by stars
+- [x] Credit/refund points
+- [x] Add cancel button
 - [x] Create an admin page
-- [x] profile page
-- [x] add deadline to card
+- [x] Profile page
+- [x] Add deadline to card
 - [x] Search functionality
-- [x] authentication (login/signup)
-- [X] Abuse prevention (not rubust)
+- [x] Authentication (login/signup)
 
-## Project Structure
-
-```
-project-bay/
-├── backend/
-│   ├── app/
-│   │   ├── __init__.py
-│   │   ├── auth.py                # JWT, password hashing, auth dependencies
-│   │   ├── config.py              # Configuration & settings
-│   │   ├── database.py            # DB engine & session
-│   │   ├── exceptions.py          # Custom exceptions
-│   │   ├── logging_config.py      # Logging setup
-│   │   ├── main.py                # FastAPI app entrypoint
-│   │   ├── models.py              # SQLAlchemy models
-│   │   ├── schemas.py             # Pydantic request/response schemas
-│   │   ├── seed.py                # Database seeding (demo data on first run)
-│   │   ├── routers/               # FastAPI HTTP layer
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py           # Admin dashboard endpoints
-│   │   │   ├── auth.py            # Authentication endpoints
-│   │   │   └── bets/              # Bet management endpoints
-│   │   │       ├── __init__.py
-│   │   │       ├── bet_crud.py    # Bet CRUD + star operations
-│   │   │       ├── challenges.py  # Challenge logic
-│   │   │       └── resolution.py  # Bet resolution logic
-│   │   ├── services/              # Business logic layer
-│   │   │   ├── __init__.py
-│   │   │   ├── bet_service.py     # Bet business logic
-│   │   │   └── challenge_service.py # Challenge business logic
-│   │   └── utils/                 # Validation utilities
-│   │       └── validation.py      # Input & business rule validation
-│   ├── initdb/                    # Test Database initialization script
-│   │   └── init_test_db.sql
-│   ├── tests/                     # Unit & integration tests
-│   │   ├── conftest.py
-│   │   ├── test_auth.py
-│   │   └── test_bets.py
-│   ├── docker-compose.yml         # Docker services configuration
-│   ├── requirements.txt           # Python dependencies
-│   ├── run.py                     # Application runner
-│   └── .env.example               # Environment variables
-│
-├── frontend/
-│   ├── src/
-│   │   ├── components/            # Reusable UI components
-│   │   │   ├── AuthPrompt.tsx     # Sign-in / create account prompt
-│   │   │   ├── BetCard.tsx        # Bet display card with star button
-│   │   │   ├── ChallengeOverlay.tsx # Challenge interaction overlay
-│   │   │   ├── CreateBetModal.tsx  # Bet creation modal
-│   │   │   └── ProtectedRoute.tsx # Route protection wrapper
-│   │   ├── contexts/              # React context providers
-│   │   │   └── AuthContext.tsx    # Global authentication state
-│   │   ├── pages/                 # Route-level pages
-│   │   │   ├── AdminPage.tsx      # Admin dashboard (users & bets)
-│   │   │   ├── HomePage.tsx       # Main feed & bets display
-│   │   │   ├── LoginPage.tsx      # Login page
-│   │   │   ├── ProfilePage.tsx    # User profile page
-│   │   │   └── SignupPage.tsx     # Registration page
-│   │   ├── services/              # API clients & frontend business logic
-│   │   │   └── api.ts             # API request handlers
-│   │   ├── utils/                 # Utility functions
-│   │   │   └── avatar.ts          # Avatar generation utilities
-│   │   ├── App.tsx                # Root application component
-│   │   ├── index.css              # Global styles
-│   │   ├── main.tsx               # React entry point
-│   │   └── types.ts               # TypeScript type definitions
-│   ├── img/                       # Static assets
-│   │   └── site.webmanifest       # PWA manifest
-│   ├── index.html                 # HTML template
-│   ├── package.json               # NPM dependencies & scripts
-│   ├── postcss.config.js          # PostCSS configuration
-│   ├── tailwind.config.js         # Tailwind CSS configuration
-│   ├── tsconfig.json              # TypeScript configuration
-│   ├── tsconfig.node.json         # TypeScript node configuration
-│   ├── vite.config.ts             # Vite bundler configuration
-│   └── .env.example               # Environment variable template
-│
-├── LICENSE
-└── README.md
-```
+---
 
 ## Bottlenecks
 
-- Single API instance (no load balancing)
-- Single DB instance
+- **Single API Instance** — No load balancing
+- **Single DB Instance**
     ```text
-        Current: SQLAlchemy creates new connection per request
-        Impact: Connection exhaustion at ~50-100 concurrent users
-        Solution: Add database connection pooling, will support 3x more.
+    Current:  SQLAlchemy creates new connection per request
+    Impact:   Connection exhaustion at ~50-100 concurrent users
+    Solution: Add database connection pooling, will support 3x more
     ```
-- No response caching
+- **No Response Caching**
     ```text
-    Current: Every request hits the database
-    Impact: Redundant queries, slower response times
-    Solution: Cache user profiles, bet listings, in Redis. It'll reduce db load by 40%.
+    Current:  Every request hits the database
+    Impact:   Redundant queries, slower response times
+    Solution: Cache user profiles, bet listings in Redis — reduces DB load by ~40%
     ```
-- Single server architecture
+- **Single Server Architecture**
     ```text
     Current: No horizontal scaling
-    Impact: Cannot distribute load across multiple instances
+    Impact:  Cannot distribute load across multiple instances
     ```
-
 
 ## Future Additions
 
 - [ ] Dark mode
 - [ ] Recommendation system
-- [ ] Vibe coded ios app
-- [ ] Adding web3 wallet to profile
+- [ ] Vibe coded iOS app
+- [ ] Adding crypto wallet
+
+---
+
+## Contributing
+
+1. Fork the project
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## License
+
+Distributed under the MIT License. See `LICENSE` for more information.
