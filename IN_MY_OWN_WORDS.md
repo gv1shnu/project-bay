@@ -20,7 +20,10 @@ If A loses his gym streak and is not confident, he can cancel the bet.
 
 \# status changed to cancelled, refunds begin.
 
-Else, the deadline i.e, Weekend arrives.
+(to implement) if B/c lose interest in the bet or want to use their 
+points somewhere else, they can hit cancel and get refunded as well.
+
+now, the deadline i.e, Weekend arrives.
 
 A uploads the picture and message for B, C to review and vote.
 
@@ -28,14 +31,16 @@ A uploads the picture and message for B, C to review and vote.
 
 B, C are notified when signed in, at the notification icon. They click to see if A did it.
 
-Both of them see the proof and vote COOL and NOT COOL.
+Both of them see the proof and vote COOL or NOT COOL.
 
-if not cool exceeds cool, meaning A faked.
+if not cool exceeds cool, meaning A faked (to do - abuse prevention)
 
 \# status changed to lost. 
 
 B recives 4(his stake) + 3.5(half of A's stake) = 7.5 points, A loses 3.5 points.
 C recieve each 5(his stake) + 3.5(half of A's stake) = 8.5 points, A loses 7 points.
+
+note: averaging out makes the incentive less convincing and product loses value, alternative required.
 
 else if A won.
 
