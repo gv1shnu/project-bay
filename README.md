@@ -127,18 +127,8 @@ Admin Dashboard: `/admin`
 ## Bottlenecks
 
 - **Single API Instance** — No load balancing
-- **Single DB Instance**
-    ```text
-    Current:  SQLAlchemy creates new connection per request
-    Impact:   Connection exhaustion at ~50-100 concurrent users
-    Solution: Add database connection pooling, will support 3x more
-    ```
-- **No Response Caching**
-    ```text
-    Current:  Every request hits the database
-    Impact:   Redundant queries, slower response times
-    Solution: Cache user profiles, bet listings in Redis — reduces DB load by ~40%
-    ```
+- ~~**Single DB Instance**~~ ✅ Fixed — Connection pooling added (`pool_size=10`, `max_overflow=20`, `pool_pre_ping`)
+- ~~**No Response Caching**~~ ✅ Fixed — In-memory TTL cache on public feed (15s) with auto-invalidation on writes
 - **Single Server Architecture**
     ```text
     Current: No horizontal scaling
@@ -149,7 +139,6 @@ Admin Dashboard: `/admin`
 
 - [ ] Dark mode
 - [ ] Recommendation system
-- [ ] Vibe coded iOS app
 - [ ] Adding crypto wallet
 
 ---

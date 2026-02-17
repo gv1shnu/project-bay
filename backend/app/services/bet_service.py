@@ -11,6 +11,7 @@ from app import models, schemas
 from app.models import BetStatus, ChallengeStatus
 from app.exceptions import InsufficientFundsError, BetNotFoundError, InvalidBetAmountError
 from app.logging_config import get_logger
+from app.cache import feed_cache
 
 logger = get_logger(__name__)
 
@@ -57,6 +58,7 @@ def create_bet(
     db.refresh(user)     # Get updated points balance
     
     logger.info(f"User {user.username} created bet {db_bet.id} with {bet_data.amount} points stake")
+    feed_cache.invalidate()  # New bet — clear feed cache
     return db_bet
 
 
@@ -97,7 +99,14 @@ def get_public_bets_paginated(
     Get all bets for the public feed, with usernames and non-rejected challenges.
     This is the main data source for the homepage feed.
     Returns: (list_of_bets_with_extra_data, total_count)
+    
+    Results are cached for 15 seconds to reduce DB load under high traffic.
     """
+    cache_key = f"feed_p{page}_l{limit}"
+    cached = feed_cache.get(cache_key)
+    if cached:
+        return cached
+
     offset = (page - 1) * limit
     total = db.query(models.Bet).count()
     
@@ -124,7 +133,9 @@ def get_public_bets_paginated(
             updated_at=bet.updated_at, username=bet.user.username, challenges=challenges, deadline=bet.deadline
         ))
     
-    return bets_with_data, total
+    result = (bets_with_data, total)
+    feed_cache.set(cache_key, result)
+    return result
 
 
 def resolve_bet(
@@ -198,5 +209,6 @@ def resolve_bet(
     db.commit()
     db.refresh(bet)
     db.refresh(user)
+    feed_cache.invalidate()  # Resolution changed bet status — clear feed cache
     
     return bet

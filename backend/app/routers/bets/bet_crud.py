@@ -16,6 +16,7 @@ from app import models, schemas
 from app.auth import get_current_user
 from app.database import get_db
 from app.config import settings
+from app.cache import feed_cache
 from app.services.bet_service import (
     validate_points,
     create_bet,
@@ -116,4 +117,5 @@ def star_bet(
     bet.stars = (bet.stars or 0) + 1
     db.commit()
     db.refresh(bet)
+    feed_cache.invalidate()  # Star count affects feed sort order
     return {"id": bet.id, "stars": bet.stars}
