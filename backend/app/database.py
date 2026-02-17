@@ -11,9 +11,18 @@ from app.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-# Create the DB engine from the connection string in .env
-# NOTE: No connection pooling configured — fine for dev, add pool_size for production
-engine = create_engine(settings.DATABASE_URL)
+# Create the DB engine with connection pooling
+# pool_size:     Number of persistent connections kept open (default was 5)
+# max_overflow:  Extra connections allowed beyond pool_size under load
+# pool_pre_ping: Test connections before using them (detects stale/dropped connections)
+# pool_recycle:  Recreate connections after this many seconds (prevents DB timeout issues)
+engine = create_engine(
+    settings.DATABASE_URL,
+    pool_size=10,          # 10 persistent connections
+    max_overflow=20,       # Up to 30 total connections under peak load
+    pool_pre_ping=True,    # Auto-reconnect stale connections
+    pool_recycle=1800,     # Recycle connections every 30 minutes
+)
 
 # Session factory — each call to SessionLocal() creates a new DB session
 # autocommit=False: we manually call db.commit()
