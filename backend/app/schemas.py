@@ -118,6 +118,10 @@ class BetResponse(BetBase):
     deadline: datetime
     status: BetStatus
     stars: int = 0    # Number of stars (likes)
+    proof_comment: Optional[str] = None       # Creator's proof description
+    proof_media_url: Optional[str] = None     # URL to uploaded proof file
+    proof_submitted_at: Optional[datetime] = None  # When proof was uploaded
+    proof_deadline: Optional[datetime] = None      # End of proof upload window
     created_at: datetime
     updated_at: Optional[datetime] = None
 

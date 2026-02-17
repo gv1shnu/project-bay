@@ -5,8 +5,10 @@ Sets up the app, middleware, rate limiting, routers, and lifespan events.
 Start with: uvicorn app.main:app
 """
 from contextlib import asynccontextmanager
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -18,6 +20,7 @@ from app.config import settings
 from app.logging_config import setup_logging, get_logger
 from app.exceptions import BettingAPIException, betting_api_exception_handler
 from app.seed import run_seed
+from app.deadline_checker import deadline_checker
 
 # Initialize logging before anything else so all modules get the configured logger
 setup_logging(level=settings.LOG_LEVEL, format_type=settings.LOG_FORMAT)
@@ -39,9 +42,14 @@ async def lifespan(app: FastAPI):
         db.close()
 
     logger.info("Application startup complete")
+
+    # Start the deadline checker background thread
+    deadline_checker.start()
     
     yield  # App runs here — everything above is startup, below is shutdown
     
+    # Stop the deadline checker on shutdown
+    deadline_checker.stop()
     logger.info("Application shutting down")
 
 
@@ -85,6 +93,11 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(bets_router)
 app.include_router(admin_router)
+
+# Serve uploaded proof files as static assets at /uploads/*
+UPLOADS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)  # Create if it doesn't exist
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 
 @app.get("/")

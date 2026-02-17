@@ -1,18 +1,24 @@
 """
-routers/bets/bet_crud.py — Bet CRUD endpoints: create, list, and get bets.
+routers/bets/bet_crud.py — Bet CRUD endpoints: create, list, get, star, and proof upload.
 
 Endpoints:
-  POST /bets/          — Create a new bet (requires auth + regex validation)
-  GET  /bets/public    — List all bets with usernames and challenges (public feed)
-  GET  /bets/          — List current user's bets (requires auth)
-  GET  /bets/{bet_id}  — Get a single bet by ID
+  POST /bets/              — Create a new bet (requires auth + regex validation)
+  GET  /bets/public        — List all bets with usernames and challenges (public feed)
+  GET  /bets/              — List current user's bets (requires auth)
+  GET  /bets/{bet_id}      — Get a single bet by ID
+  POST /bets/{bet_id}/star — Increment star count
+  POST /bets/{bet_id}/proof — Upload proof of completion (requires auth)
 """
+import os
 import math
-from fastapi import APIRouter, Depends, Request, Query, status, HTTPException
+import uuid
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, Request, Query, status, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app import models, schemas
+from app.models import BetStatus
 from app.auth import get_current_user
 from app.database import get_db
 from app.config import settings
@@ -25,9 +31,17 @@ from app.services.bet_service import (
     get_public_bets_paginated,
 )
 from app.utils.validation import is_personal
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
+
+# Allowed file types for proof upload
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".mov", ".webm"}
+# Max file size: 10 MB
+MAX_FILE_SIZE = 10 * 1024 * 1024
 
 
 @router.post("/", response_model=schemas.BetResponse, status_code=status.HTTP_201_CREATED)
@@ -119,3 +133,71 @@ def star_bet(
     db.refresh(bet)
     feed_cache.invalidate()  # Star count affects feed sort order
     return {"id": bet.id, "stars": bet.stars}
+
+
+@router.post("/{bet_id}/proof")
+@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+async def upload_proof(
+    request: Request,
+    bet_id: int,
+    comment: str = Form(..., min_length=1, max_length=1000),
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Upload proof of bet completion (comment + media file). Creator only, during proof window."""
+    bet = get_bet_by_id(db, bet_id)
+
+    # Only the bet creator can upload proof
+    if bet.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the bet creator can upload proof")
+
+    # Bet must be in AWAITING_PROOF status
+    if bet.status != BetStatus.AWAITING_PROOF:
+        raise HTTPException(status_code=400, detail="Bet is not awaiting proof")
+
+    # Check proof window hasn't expired
+    now = datetime.now(timezone.utc)
+    if bet.proof_deadline and now > bet.proof_deadline:
+        raise HTTPException(status_code=400, detail="Proof upload window has expired")
+
+    # Validate file extension
+    _, ext = os.path.splitext(file.filename or "")
+    ext = ext.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type not allowed. Accepted: {', '.join(ALLOWED_EXTENSIONS)}"
+        )
+
+    # Read and validate file size
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
+
+    # Save file with unique name to prevent collisions
+    unique_name = f"{bet_id}_{uuid.uuid4().hex[:8]}{ext}"
+    uploads_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads")
+    os.makedirs(uploads_dir, exist_ok=True)
+    file_path = os.path.join(uploads_dir, unique_name)
+
+    with open(file_path, "wb") as f:
+        f.write(contents)
+
+    # Update bet with proof data
+    bet.proof_comment = comment
+    bet.proof_media_url = f"/uploads/{unique_name}"
+    bet.proof_submitted_at = now
+    bet.status = BetStatus.PROOF_UNDER_REVIEW
+    db.commit()
+    db.refresh(bet)
+
+    feed_cache.invalidate()  # Status change affects feed
+    logger.info("Bet %d: proof uploaded by %s, status → PROOF_UNDER_REVIEW", bet_id, current_user.username)
+
+    return {
+        "id": bet.id,
+        "status": bet.status.value,
+        "proof_comment": bet.proof_comment,
+        "proof_media_url": bet.proof_media_url,
+    }

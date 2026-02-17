@@ -207,6 +207,38 @@ class ApiService {
     });
   }
 
+  /** Upload proof of bet completion (comment + media file). Creator only. */
+  async submitProof(
+    betId: number,
+    comment: string,
+    file: File
+  ): Promise<ApiResponse<{ id: number; status: string; proof_comment: string; proof_media_url: string }>> {
+    const formData = new FormData();
+    formData.append('comment', comment);
+    formData.append('file', file);
+
+    const token = localStorage.getItem('token');
+    try {
+      const response = await fetch(`${this.baseUrl}/bets/${betId}/proof`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => undefined);
+        return { error: errData?.detail || `Upload failed (${response.status})` };
+      }
+
+      const data = await response.json();
+      return { data };
+    } catch (err: any) {
+      return { error: err.message || 'Network error' };
+    }
+  }
+
 
   // ════════════════════════════════════════════════════════
   // Challenge Endpoints

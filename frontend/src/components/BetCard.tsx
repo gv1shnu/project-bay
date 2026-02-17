@@ -20,9 +20,10 @@ interface BetCardProps {
   onChallenge: () => void    // Called when "Challenge" button is clicked
   onDismiss: () => void      // Called when "Dismiss" or ✕ button is clicked
   onStar: () => void         // Called when "Star" button is clicked
+  onUploadProof?: () => void // Called when "Upload Proof" button is clicked (creator only)
 }
 
-export default function BetCard({ bet, onChallenge, onDismiss, onStar }: BetCardProps) {
+export default function BetCard({ bet, onChallenge, onDismiss, onStar, onUploadProof }: BetCardProps) {
   const navigate = useNavigate()
   const { user } = useAuth()
 
@@ -46,7 +47,18 @@ export default function BetCard({ bet, onChallenge, onDismiss, onStar }: BetCard
       case 'won': return 'bg-friendly-light text-friendly-dark'   // Green
       case 'lost': return 'bg-red-100 text-red-700'                // Red
       case 'cancelled': return 'bg-gray-100 text-gray-700'              // Gray
+      case 'awaiting_proof': return 'bg-amber-100 text-amber-700'       // Amber
+      case 'proof_under_review': return 'bg-blue-100 text-blue-700'     // Blue
       default: return 'bg-yellow-100 text-yellow-700'          // Yellow (active)
+    }
+  }
+
+  /** Map status to human-friendly labels */
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'awaiting_proof': return 'AWAITING PROOF'
+      case 'proof_under_review': return 'PROOF UNDER REVIEW'
+      default: return status.toUpperCase()
     }
   }
 
@@ -88,7 +100,7 @@ export default function BetCard({ bet, onChallenge, onDismiss, onStar }: BetCard
             )}
             {/* Color-coded status badge */}
             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(bet.status)}`}>
-              {bet.status.toUpperCase()}
+              {getStatusLabel(bet.status)}
             </span>
           </div>
           {/* Dismiss button (top-right ✕) */}
@@ -161,6 +173,21 @@ export default function BetCard({ bet, onChallenge, onDismiss, onStar }: BetCard
 
         {/* ── Action buttons ── */}
         <div className="flex gap-3">
+          {/* Creator sees Upload Proof button when bet is awaiting proof */}
+          {isOwnBet && bet.status === 'awaiting_proof' && onUploadProof && (
+            <button
+              onClick={onUploadProof}
+              className="flex-1 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-semibold hover:from-amber-600 hover:to-orange-600 transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+            >
+              📷 Upload Proof
+            </button>
+          )}
+          {/* Creator sees "Proof Submitted" badge when proof is under review */}
+          {isOwnBet && bet.status === 'proof_under_review' && (
+            <span className="flex-1 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg font-semibold text-center border-2 border-blue-200">
+              ✅ Proof Submitted
+            </span>
+          )}
           {!isOwnBet && (
             <>
               <button
@@ -180,8 +207,8 @@ export default function BetCard({ bet, onChallenge, onDismiss, onStar }: BetCard
               )}
             </>
           )}
-          {/* Show "Your bet" label instead of action buttons on user's own bets */}
-          {isOwnBet && (
+          {/* Show "Your bet" label on user's own bets (non-proof statuses) */}
+          {isOwnBet && bet.status !== 'awaiting_proof' && bet.status !== 'proof_under_review' && (
             <span className="text-sm text-gray-400 italic">Your bet</span>
           )}
         </div>

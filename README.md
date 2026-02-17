@@ -108,7 +108,8 @@ Admin Dashboard: `/admin`
 ## To Do
 
 - [ ] Friends network
-- [ ] Proof upload
+- [X] Proof upload
+- [x] add notification icon
 - [ ] Configuring POC
 - [ ] Win/loss decision
 - [ ] Abuse prevention (using LLM)
@@ -127,13 +128,7 @@ Admin Dashboard: `/admin`
 ## Bottlenecks
 
 - **Single API Instance** — No load balancing
-- ~~**Single DB Instance**~~ ✅ Fixed — Connection pooling added (`pool_size=10`, `max_overflow=20`, `pool_pre_ping`)
-- ~~**No Response Caching**~~ ✅ Fixed — In-memory TTL cache on public feed (15s) with auto-invalidation on writes
-- **Single Server Architecture**
-    ```text
-    Current: No horizontal scaling
-    Impact:  Cannot distribute load across multiple instances
-    ```
+- **Single Server Architecture** - No horizontal scaling
 
 ## Future Additions
 

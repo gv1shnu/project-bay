@@ -14,6 +14,7 @@ import SignupPage from './pages/SignupPage';
 import HomePage from './pages/HomePage';
 import ProfilePage from './pages/ProfilePage';
 import AdminPage from './pages/AdminPage';
+import NotificationsPage from './pages/NotificationsPage';
 
 function App() {
   return (
@@ -30,6 +31,9 @@ function App() {
 
           {/* Main feed — shows all public bets */}
           <Route path="/" element={<HomePage />} />
+
+          {/* Notifications — user's activity feed */}
+          <Route path="/notifications" element={<NotificationsPage />} />
 
           {/* Admin dashboard — view all users and bets */}
           <Route path="/admin" element={<AdminPage />} />
