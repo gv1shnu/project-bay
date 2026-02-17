@@ -18,10 +18,12 @@ from app.database import Base
 
 class BetStatus(str, enum.Enum):
     """Possible lifecycle states for a bet."""
-    ACTIVE = "active"         # Bet is open — can receive challenges
-    WON = "won"               # Creator completed their commitment
-    LOST = "lost"             # Creator failed — challengers win
-    CANCELLED = "cancelled"   # Creator cancelled — everyone gets refunded
+    ACTIVE = "active"                       # Bet is open — can receive challenges
+    AWAITING_PROOF = "awaiting_proof"       # Deadline passed — creator has 1hr to upload proof
+    PROOF_UNDER_REVIEW = "proof_under_review"  # Proof uploaded — waiting for review
+    WON = "won"                             # Creator completed their commitment
+    LOST = "lost"                           # Creator failed — challengers win
+    CANCELLED = "cancelled"                 # Creator cancelled — everyone gets refunded
 
 
 class ChallengeStatus(str, enum.Enum):
@@ -60,6 +62,10 @@ class Bet(Base):
     deadline = Column(DateTime(timezone=True), nullable=False)           # When the bet expires
     status = Column(Enum(BetStatus), default=BetStatus.ACTIVE, nullable=False)  # Current lifecycle state
     stars = Column(Integer, default=0, nullable=False)                           # Number of stars (likes)
+    proof_comment = Column(String, nullable=True)                # Creator's proof description
+    proof_media_url = Column(String, nullable=True)              # Path to uploaded proof file
+    proof_submitted_at = Column(DateTime(timezone=True), nullable=True)  # When proof was uploaded
+    proof_deadline = Column(DateTime(timezone=True), nullable=True)      # Deadline + 1hr for proof upload
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

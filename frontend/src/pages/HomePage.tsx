@@ -13,16 +13,19 @@
  *   fetchBets() → apiService.getPublicBets() → setBets() → filteredBets (useMemo) → BetCard grid
  */
 import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import BetCard from '../components/BetCard'
 import ChallengeOverlay from '../components/ChallengeOverlay'
 import AuthPrompt from '../components/AuthPrompt'
 import CreateBetModal from '../components/CreateBetModal'
+import ProofUploadModal from '../components/ProofUploadModal'
 import { Bet } from '../types'
 import { useAuth } from '../contexts/AuthContext'
 import { apiService } from '../services/api'
 import { getAvatarUrl } from '../utils/avatar'
 
 export default function HomePage() {
+  const navigate = useNavigate()
   // ── State ──
   const [bets, setBets] = useState<Bet[]>([])                    // All public bets from API
   const [selectedBet, setSelectedBet] = useState<number | null>(null)  // Bet ID being challenged (null = no overlay)
@@ -34,6 +37,7 @@ export default function HomePage() {
   const [userCount, setUserCount] = useState(0)                  // Total registered users (footer)
   const { user, logout, isAuthenticated, refreshUser } = useAuth()
   const [createBetError, setCreateBetError] = useState<string | null>(null)  // Error from create bet API
+  const [proofBetId, setProofBetId] = useState<number | null>(null) // Bet ID for proof upload modal
 
   // Fetch bets on mount + auto-refresh every 30 seconds
   useEffect(() => {
@@ -67,7 +71,9 @@ export default function HomePage() {
    * Re-computes only when bets or searchQuery changes.
    */
   const filteredBets = useMemo(() => {
-    let result = bets.filter(bet => bet.status === 'active')
+    let result = bets.filter(bet =>
+      bet.status === 'active' || bet.status === 'awaiting_proof' || bet.status === 'proof_under_review'
+    )
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
       result = result.filter(bet =>
@@ -147,6 +153,18 @@ export default function HomePage() {
     }
   }
 
+  /** Handle proof upload for a bet */
+  const handleProofSubmit = async (comment: string, file: File) => {
+    if (!proofBetId) return
+    const response = await apiService.submitProof(proofBetId, comment, file)
+    if (response.data) {
+      setProofBetId(null)
+      await fetchBets()   // Refresh to show updated status
+    } else {
+      throw new Error(response.error || 'Failed to upload proof')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-competitive-light/20 via-white to-friendly-light/20">
       <div className="container mx-auto px-4 py-8">
@@ -166,7 +184,7 @@ export default function HomePage() {
             <div className="flex items-center gap-4">
               {user ? (
                 <>
-                  {/* Logged in: show avatar, username, points, and logout */}
+                  {/* Logged in: show avatar, username, points, notification bell, and logout */}
                   <a href={`/profile/${user.username}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
                     <img
                       src={getAvatarUrl(user.username)}
@@ -179,6 +197,17 @@ export default function HomePage() {
                       <p className="text-xs text-competitive-dark font-semibold">{user.points} points</p>
                     </div>
                   </a>
+                  {/* Notification bell */}
+                  <button
+                    onClick={() => navigate('/notifications')}
+                    className="relative p-2 text-gray-400 hover:text-competitive-dark transition-colors hover:bg-gray-100 rounded-full"
+                    title="Notifications"
+                    aria-label="Notifications"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                  </button>
                   <button
                     onClick={logout}
                     className="px-4 py-2 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
@@ -275,6 +304,7 @@ export default function HomePage() {
                   onChallenge={() => handleChallengeClick(bet.id)}
                   onDismiss={() => handleDismiss(bet.id)}
                   onStar={() => handleStar(bet.id)}
+                  onUploadProof={bet.status === 'awaiting_proof' ? () => setProofBetId(bet.id) : undefined}
                 />
               ))}
             </div>
@@ -325,6 +355,18 @@ export default function HomePage() {
           onClearError={() => setCreateBetError(null)}
         />
       )}
+      {/* Proof upload modal — shown when creator clicks Upload Proof */}
+      {proofBetId && (() => {
+        const proofBet = bets.find(b => b.id === proofBetId)
+        return proofBet ? (
+          <ProofUploadModal
+            betTitle={proofBet.title}
+            proofDeadline={proofBet.proof_deadline || proofBet.deadline}
+            onClose={() => setProofBetId(null)}
+            onSubmit={handleProofSubmit}
+          />
+        ) : null
+      })()}
 
       {/* ══════════════ Footer ══════════════ */}
       {userCount > 0 && (

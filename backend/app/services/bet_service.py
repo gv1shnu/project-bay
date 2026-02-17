@@ -130,7 +130,10 @@ def get_public_bets_paginated(
         bets_with_data.append(schemas.BetWithUsername(
             id=bet.id, user_id=bet.user_id, title=bet.title, amount=bet.amount,
             criteria=bet.criteria, status=bet.status, stars=bet.stars, created_at=bet.created_at,
-            updated_at=bet.updated_at, username=bet.user.username, challenges=challenges, deadline=bet.deadline
+            updated_at=bet.updated_at, username=bet.user.username, challenges=challenges,
+            deadline=bet.deadline, proof_comment=bet.proof_comment,
+            proof_media_url=bet.proof_media_url, proof_submitted_at=bet.proof_submitted_at,
+            proof_deadline=bet.proof_deadline,
         ))
     
     result = (bets_with_data, total)
