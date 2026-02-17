@@ -228,17 +228,29 @@ class ApiService {
 
 
   // ════════════════════════════════════════════════════════
-  // Admin Endpoints
+  // Admin Endpoints (passphrase-protected)
   // ════════════════════════════════════════════════════════
 
+  /** Verify the admin passphrase before showing the dashboard. */
+  async verifyAdminPassphrase(passphrase: string): Promise<ApiResponse<{ status: string }>> {
+    return this.request<{ status: string }>('/admin/verify', {
+      method: 'POST',
+      headers: { 'X-Admin-Passphrase': passphrase },
+    });
+  }
+
   /** Fetch all users for the admin dashboard. */
-  async getAdminUsers(): Promise<ApiResponse<User[]>> {
-    return this.request<User[]>('/admin/users');
+  async getAdminUsers(passphrase: string): Promise<ApiResponse<User[]>> {
+    return this.request<User[]>('/admin/users', {
+      headers: { 'X-Admin-Passphrase': passphrase },
+    });
   }
 
   /** Fetch all bets with challenges for the admin dashboard. */
-  async getAdminBets(): Promise<ApiResponse<Bet[]>> {
-    return this.request<Bet[]>('/admin/bets');
+  async getAdminBets(passphrase: string): Promise<ApiResponse<Bet[]>> {
+    return this.request<Bet[]>('/admin/bets', {
+      headers: { 'X-Admin-Passphrase': passphrase },
+    });
   }
 }
 

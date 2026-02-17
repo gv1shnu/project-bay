@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_LOGIN_PER_MINUTE: int = 10     # Stricter limit for login to prevent brute force
     RATELIMIT_ENABLED: bool = True            # Set to False to disable rate limiting in dev
 
+    # --- Admin ---
+    ADMIN_PASSPHRASE: str                     # Passphrase required to access /admin endpoints
+
     # --- Logging ---
     LOG_LEVEL: str = "INFO"                   # DEBUG, INFO, WARNING, ERROR, CRITICAL
     LOG_FORMAT: str = "development"           # "development" = human-readable, "production" = JSON
