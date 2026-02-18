@@ -6,6 +6,7 @@
 ![Postgres](https://img.shields.io/badge/postgres-16-336791.svg)
 
 **Project BAY** is a social challenge platform where users stake personal commitments against friends using a virtual points system. Prove your discipline, challenge your friends, and track your wins.
+Current Status: Building the MVP.
 
 ## Demo
 
