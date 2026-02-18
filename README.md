@@ -91,18 +91,6 @@ Auth:     JWT (OAuth2 password flow)
    npm run dev      (local)
    ```
 
-### Default Credentials (Seed Data)
-
-The application automatically seeds demo data on the first run.
-
-| Username   | Password       |
-|------------|----------------|
-| **alex**   | `***********`  |
-| **jordan** | `***********`  |
-| **sam**    | `***********`  |
-
-Admin Dashboard: `/admin`
-
 ---
 
 ## To Do
@@ -122,19 +110,6 @@ Admin Dashboard: `/admin`
 - [x] Add deadline to card
 - [x] Search functionality
 - [x] Authentication (login/signup)
-
----
-
-## Bottlenecks
-
-- **Single API Instance** — No load balancing
-- **Single Server Architecture** - No horizontal scaling
-
-## Future Additions
-
-- [ ] Dark mode
-- [ ] Recommendation system
-- [ ] Adding crypto wallet
 
 ---
 
