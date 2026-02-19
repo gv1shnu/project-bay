@@ -16,10 +16,10 @@ from app.database import engine, Base, SessionLocal
 from app.routers import auth
 from app.routers.bets import router as bets_router
 from app.routers.admin import router as admin_router
+from app.routers.notifications import router as notifications_router
 from app.config import settings
 from app.logging_config import setup_logging, get_logger
 from app.exceptions import BettingAPIException, betting_api_exception_handler
-from app.seed import run_seed
 from app.deadline_checker import deadline_checker
 
 # Initialize logging before anything else so all modules get the configured logger
@@ -33,13 +33,6 @@ async def lifespan(app: FastAPI):
     # Auto-create all tables defined in models.py (safe to call repeatedly)
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables created")
-
-    # Seed demo data on first run (skips if data already exists)
-    db = SessionLocal()
-    try:
-        run_seed(db)
-    finally:
-        db.close()
 
     logger.info("Application startup complete")
 
@@ -93,6 +86,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(bets_router)
 app.include_router(admin_router)
+app.include_router(notifications_router)
 
 # Serve uploaded proof files as static assets at /uploads/*
 UPLOADS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")

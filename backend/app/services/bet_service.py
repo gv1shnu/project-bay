@@ -134,6 +134,13 @@ def get_public_bets_paginated(
             deadline=bet.deadline, proof_comment=bet.proof_comment,
             proof_media_url=bet.proof_media_url, proof_submitted_at=bet.proof_submitted_at,
             proof_deadline=bet.proof_deadline,
+            proof_votes=[
+                schemas.ProofVoteResponse(
+                    id=v.id, bet_id=v.bet_id, user_id=v.user_id,
+                    username=v.voter.username, vote=v.vote, created_at=v.created_at,
+                ) for v in bet.proof_votes
+            ],
+            starred_by_user_ids=[s.user_id for s in bet.starred_by],
         ))
     
     result = (bets_with_data, total)

@@ -1,15 +1,13 @@
 """
 deadline_checker.py — Background thread that monitors bet deadlines.
 
-Runs every 60 seconds and handles two transitions:
-  1. ACTIVE → AWAITING_PROOF:  When a bet's deadline passes, the creator gets
-     a 1-hour window to upload proof of completion.
-  2. AWAITING_PROOF → LOST:    If the creator doesn't upload proof within
-     the 1-hour window, the bet is auto-resolved as lost.
+Runs every 60 seconds and handles one transition:
+  ACTIVE → LOST:  When a bet's deadline passes without proof uploaded,
+  the bet is auto-resolved as lost and challengers receive their winnings.
 """
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app import models
@@ -21,9 +19,6 @@ logger = get_logger(__name__)
 
 # How often the checker runs (seconds)
 CHECK_INTERVAL = 60
-
-# How long the creator has to upload proof after the deadline
-PROOF_WINDOW_HOURS = 1
 
 
 class DeadlineChecker:
@@ -57,33 +52,21 @@ class DeadlineChecker:
             self._stop_event.wait(CHECK_INTERVAL)
 
     def _check_deadlines(self):
-        """Single check pass — transitions eligible bets."""
+        """Single check pass — ACTIVE bets past deadline without proof → LOST."""
         db: Session = SessionLocal()
         now = datetime.now(timezone.utc)
         changed = False
 
         try:
-            # ── 1. ACTIVE bets past their deadline → AWAITING_PROOF ──
+            # Find ACTIVE bets whose deadline has passed (no proof was uploaded in time)
             expired_active = db.query(models.Bet).filter(
                 models.Bet.status == BetStatus.ACTIVE,
                 models.Bet.deadline <= now,
             ).all()
 
             for bet in expired_active:
-                bet.status = BetStatus.AWAITING_PROOF
-                bet.proof_deadline = bet.deadline + timedelta(hours=PROOF_WINDOW_HOURS)
-                logger.info("Bet %d → AWAITING_PROOF (proof deadline: %s)", bet.id, bet.proof_deadline)
-                changed = True
-
-            # ── 2. AWAITING_PROOF bets past their proof_deadline → LOST ──
-            expired_proof = db.query(models.Bet).filter(
-                models.Bet.status == BetStatus.AWAITING_PROOF,
-                models.Bet.proof_deadline <= now,
-            ).all()
-
-            for bet in expired_proof:
                 bet.status = BetStatus.LOST
-                # Distribute points to accepted challengers (same logic as resolve_bet LOST)
+                # Distribute points to accepted challengers (2× their stake)
                 accepted_challenges = [
                     c for c in bet.challenges if c.status == ChallengeStatus.ACCEPTED
                 ]
@@ -97,7 +80,7 @@ class DeadlineChecker:
                             "Auto-loss: Challenger %s won %d pts from bet %d",
                             challenger.username, challenge.amount * 2, bet.id
                         )
-                logger.info("Bet %d → LOST (proof window expired)", bet.id)
+                logger.info("Bet %d → LOST (deadline passed without proof)", bet.id)
                 changed = True
 
             if changed:
@@ -109,3 +92,4 @@ class DeadlineChecker:
 
 # Singleton instance — import and use deadline_checker.start() / .stop()
 deadline_checker = DeadlineChecker()
+

@@ -48,6 +48,19 @@ def setup_logging(level: str = "INFO", format_type: str = "development") -> None
     console_handler.setLevel(log_level)
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
+
+    # File handler — save logs to file (max 10MB, 5 backups)
+    from logging.handlers import RotatingFileHandler
+    import os
+    
+    log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    file_path = os.path.join(log_dir, "app.log")
+    
+    file_handler = RotatingFileHandler(file_path, maxBytes=10*1024*1024, backupCount=5)
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(formatter)
+    root_logger.addHandler(file_handler)
     
     # Silence noisy third-party loggers — they spam on every request/query
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
