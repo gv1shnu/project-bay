@@ -6,9 +6,10 @@
 ![Postgres](https://img.shields.io/badge/postgres-16-336791.svg)
 
 **Project BAY** is a social challenge platform where users stake personal commitments against friends using a virtual points system. Prove your discipline, challenge your friends, and track your wins.
+
 Current Status: Building the MVP.
 
-## Demo
+## Demo v1
 
 <table>
   <tr>
@@ -100,7 +101,7 @@ Auth:     JWT (OAuth2 password flow)
 - [X] Proof upload
 - [x] add notification icon
 - [ ] Configuring POC
-- [ ] Win/loss decision
+- [x] Win/loss decision
 - [ ] Abuse prevention (using LLM)
 - [x] Add star button to card
 - [x] Sort the feed by stars
@@ -125,3 +126,7 @@ Auth:     JWT (OAuth2 password flow)
 ## License
 
 Distributed under the MIT License. See `LICENSE` for more information.
+
+## Disclaimer
+
+Project not meant to be moderated. Usage of Claude involved during development.
