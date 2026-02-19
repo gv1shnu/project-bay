@@ -28,8 +28,9 @@ export default function LoginPage() {
     try {
       await login(username, password)
       navigate('/')  // Redirect to homepage after successful login
-    } catch (err) {
-      setError('An error occurred. Please try again.')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'An error occurred'
+      setError(message)
     } finally {
       setLoading(false)  // Re-enable the submit button
     }

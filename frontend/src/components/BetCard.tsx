@@ -1,14 +1,8 @@
 /**
- * BetCard.tsx — Displays a single bet in the public feed.
+ * BetCard.tsx — Compact bet card for the public feed.
  *
- * Shows: title, creator avatar, status badge, total stake, challengers,
- * success criteria, and action buttons (Challenge / Dismiss).
- *
- * Key behavior:
- *   - Hides Challenge button on your own bets (shows "Your bet" instead)
- *   - Only shows Challenge on active bets (not resolved/cancelled)
- *   - Clicking a username avatar navigates to their profile page
- *   - Total stake = creator's amount + all active (accepted+pending) challenges
+ * Shows only: title, creator avatar + username, total stake, star count, status badge.
+ * Clicking the card opens the BetDetailModal for full details.
  */
 import { useNavigate } from 'react-router-dom'
 import { Bet } from '../types'
@@ -17,200 +11,98 @@ import { useAuth } from '../contexts/AuthContext'
 
 interface BetCardProps {
   bet: Bet
-  onChallenge: () => void    // Called when "Challenge" button is clicked
-  onDismiss: () => void      // Called when "Dismiss" or ✕ button is clicked
-  onStar: () => void         // Called when "Star" button is clicked
-  onUploadProof?: () => void // Called when "Upload Proof" button is clicked (creator only)
+  onCardClick: () => void   // Opens the detail modal
+  onStar: () => void        // Toggle star
 }
 
-export default function BetCard({ bet, onChallenge, onDismiss, onStar, onUploadProof }: BetCardProps) {
+export default function BetCard({ bet, onCardClick, onStar }: BetCardProps) {
   const navigate = useNavigate()
   const { user } = useAuth()
 
-  // Check if this bet belongs to the current user (hide challenge button if so)
-  const isOwnBet = user?.username === bet.username
+  // Check if current user starred this bet
+  const isStarred = user && bet.starred_by_user_ids?.includes(user.id)
 
-  /** Format a date string into a readable short format (e.g., "Jan 5, 02:30 PM") */
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
+  // Calculate total points at stake (creator + all active challengers)
+  const allActiveChallenges = bet.challenges?.filter(c => c.status === 'accepted' || c.status === 'pending') || []
+  const challengerStakes = allActiveChallenges.reduce((sum, c) => sum + c.amount, 0)
+  const totalStake = bet.amount + challengerStakes
 
-  /** Map bet status to Tailwind color classes for the status badge */
+  /** Map bet status to Tailwind color classes */
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'won': return 'bg-friendly-light text-friendly-dark'   // Green
-      case 'lost': return 'bg-red-100 text-red-700'                // Red
-      case 'cancelled': return 'bg-gray-100 text-gray-700'              // Gray
-      case 'awaiting_proof': return 'bg-amber-100 text-amber-700'       // Amber
-      case 'proof_under_review': return 'bg-blue-100 text-blue-700'     // Blue
-      default: return 'bg-yellow-100 text-yellow-700'          // Yellow (active)
+      case 'won': return 'bg-friendly-light text-friendly-dark'
+      case 'lost': return 'bg-red-100 text-red-700'
+      case 'cancelled': return 'bg-gray-100 text-gray-700'
+      case 'proof_under_review': return 'bg-blue-100 text-blue-700'
+      default: return 'bg-yellow-100 text-yellow-700'
     }
   }
 
   /** Map status to human-friendly labels */
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case 'awaiting_proof': return 'AWAITING PROOF'
-      case 'proof_under_review': return 'PROOF UNDER REVIEW'
+      case 'proof_under_review': return 'UNDER REVIEW'
       default: return status.toUpperCase()
     }
   }
 
-  // Filter challenges by status for display
-  const acceptedChallenges = bet.challenges?.filter(c => c.status === 'accepted') || []
-  const allActiveChallenges = bet.challenges?.filter(c => c.status === 'accepted' || c.status === 'pending') || []
-
-  // Calculate total points at stake (creator + all active challengers)
-  const challengerStakes = allActiveChallenges.reduce((sum, c) => sum + c.amount, 0)
-  const totalStake = bet.amount + challengerStakes
-
   return (
-    <div className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden border-2 border-gray-100">
-      <div className="p-6">
-        {/* ── Header: Title + Creator info + Status badge ── */}
-        <div className="flex justify-between items-start mb-4">
-          <div className="flex-1 pr-2">
-            <h2 className="text-xl font-bold text-gray-800 mb-2">
-              {bet.title}
-            </h2>
-            {/* Creator's avatar + username (clickable → navigates to profile) */}
-            {bet.username && (
-              <div className="flex items-center gap-2 mb-2">
-                <button
-                  onClick={() => navigate(`/profile/${bet.username}`)}
-                  className="hover:opacity-80 transition-opacity"
-                  title={`View ${bet.username}'s profile`}
-                >
-                  <img
-                    src={getAvatarUrl(bet.username || '')}
-                    alt={`${bet.username}'s avatar`}
-                    className="w-8 h-8 rounded-full border-2 border-competitive-light"
-                  />
-                </button>
-                <span className="text-sm text-gray-500">
-                  by <span className="font-semibold text-competitive-dark">@{bet.username}</span>
-                </span>
-              </div>
-            )}
-            {/* Color-coded status badge */}
-            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(bet.status)}`}>
-              {getStatusLabel(bet.status)}
-            </span>
-          </div>
-          {/* Dismiss button (top-right ✕) */}
+    <div
+      className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border-2 border-gray-100 cursor-pointer hover:-translate-y-0.5"
+      onClick={onCardClick}
+    >
+      <div className="p-5">
+        {/* Top row: status badge */}
+        <div className="flex items-center justify-between mb-3">
+          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusColor(bet.status)}`}>
+            {getStatusLabel(bet.status)}
+          </span>
+          {/* Star button — stop propagation so it doesn't open modal */}
           <button
-            onClick={onDismiss}
-            className="text-gray-400 hover:text-gray-600 transition-colors text-xl font-bold"
-            aria-label="Dismiss"
+            onClick={e => { e.stopPropagation(); onStar() }}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-full transition-all active:scale-125 group ${isStarred
+              ? 'bg-yellow-200 text-yellow-700 hover:bg-yellow-300'
+              : 'bg-yellow-50 hover:bg-yellow-100 text-yellow-500 hover:text-yellow-600'
+              }`}
+            title={isStarred ? 'Unstar' : 'Star'}
           >
-            ×
+            <svg className="w-3.5 h-3.5 transition-transform group-hover:scale-110" fill="currentColor" viewBox="0 0 24 24">
+              {isStarred ? (
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              ) : (
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" strokeWidth="1.5" stroke="currentColor" fill="none" />
+              )}
+            </svg>
+            <span className="text-xs font-bold">{bet.stars || 0}</span>
           </button>
         </div>
 
-        <div className="space-y-3 mb-4">
-          {/* ── Total stake display ── */}
-          <div className="flex items-center justify-between bg-competitive-light/20 rounded-lg p-3">
-            <span className="text-sm font-semibold text-gray-600">Total at Stake:</span>
-            <span className="text-xl font-bold text-competitive-dark">{totalStake} points</span>
-          </div>
+        {/* Title */}
+        <h2 className="text-lg font-bold text-gray-800 mb-3 line-clamp-2 leading-snug">{bet.title}</h2>
 
-          {/* ── Accepted challengers list (with avatars and amounts) ── */}
-          {acceptedChallenges.length > 0 && (
-            <div className="bg-gray-50 rounded-lg p-3">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                Challengers ({acceptedChallenges.length}):
-              </span>
-              <div className="mt-2 space-y-2">
-                {acceptedChallenges.map(challenge => (
-                  <div key={challenge.id} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <img
-                        src={getAvatarUrl(challenge.challenger_username)}
-                        alt={challenge.challenger_username}
-                        className="w-5 h-5 rounded-full"
-                      />
-                      <span className="text-gray-700">@{challenge.challenger_username}</span>
-                    </div>
-                    <span className="font-semibold text-competitive-dark">{challenge.amount} pts</span>
-                  </div>
-                ))}
-              </div>
+        {/* Bottom row: avatar + username + stake */}
+        <div className="flex items-center justify-between">
+          {/* Creator info */}
+          {bet.username && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={e => { e.stopPropagation(); navigate(`/profile/${bet.username}`) }}
+                className="hover:opacity-80 transition-opacity"
+                title={`View ${bet.username}'s profile`}
+              >
+                <img
+                  src={getAvatarUrl(bet.username || '')}
+                  alt={`${bet.username}'s avatar`}
+                  className="w-7 h-7 rounded-full border-2 border-competitive-light"
+                />
+              </button>
+              <span className="text-xs text-gray-500 font-medium">@{bet.username}</span>
             </div>
           )}
-
-          {/* ── Success criteria ── */}
-          <div className="bg-gray-50 rounded-lg p-3">
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Success Criteria:</span>
-            <p className="text-sm text-gray-700 mt-1">{bet.criteria}</p>
-          </div>
-
-          {/* ── Creation timestamp ── */}
-          <div className="flex items-center justify-between text-xs text-gray-400">
-            <span>{formatDate(bet.created_at)}</span>
-            {/* ── Star button ── */}
-            <button
-              onClick={onStar}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-yellow-50 hover:bg-yellow-100 text-yellow-600 hover:text-yellow-700 transition-all active:scale-125 group"
-              title="Star this bet"
-            >
-              <svg
-                className="w-4 h-4 transition-transform group-hover:scale-110"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-              </svg>
-              <span className="text-sm font-semibold">{bet.stars || 0}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* ── Action buttons ── */}
-        <div className="flex gap-3">
-          {/* Creator sees Upload Proof button when bet is awaiting proof */}
-          {isOwnBet && bet.status === 'awaiting_proof' && onUploadProof && (
-            <button
-              onClick={onUploadProof}
-              className="flex-1 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-semibold hover:from-amber-600 hover:to-orange-600 transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
-            >
-              📷 Upload Proof
-            </button>
-          )}
-          {/* Creator sees "Proof Submitted" badge when proof is under review */}
-          {isOwnBet && bet.status === 'proof_under_review' && (
-            <span className="flex-1 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg font-semibold text-center border-2 border-blue-200">
-              ✅ Proof Submitted
-            </span>
-          )}
-          {!isOwnBet && (
-            <>
-              <button
-                onClick={onDismiss}
-                className="flex-1 px-4 py-2 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
-              >
-                Dismiss
-              </button>
-              {/* Only show Challenge button on active bets */}
-              {bet.status === 'active' && (
-                <button
-                  onClick={onChallenge}
-                  className="flex-1 px-4 py-2 bg-gradient-to-r from-competitive-dark to-competitive-DEFAULT text-white rounded-lg font-semibold hover:from-competitive-DEFAULT hover:to-competitive-light transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
-                >
-                  Challenge
-                </button>
-              )}
-            </>
-          )}
-          {/* Show "Your bet" label on user's own bets (non-proof statuses) */}
-          {isOwnBet && bet.status !== 'awaiting_proof' && bet.status !== 'proof_under_review' && (
-            <span className="text-sm text-gray-400 italic">Your bet</span>
-          )}
+          {/* Stake */}
+          <span className="text-sm font-bold text-competitive-dark bg-competitive-light/20 px-2.5 py-1 rounded-lg">
+            {totalStake} pts
+          </span>
         </div>
       </div>
     </div>

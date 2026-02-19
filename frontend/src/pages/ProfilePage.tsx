@@ -169,7 +169,7 @@ export default function ProfilePage() {
                             {profileUser && (
                                 <div className="mb-4">
                                     <p className="text-xl text-competitive-dark font-semibold">
-                                        {profileUser.points} points
+                                        Balance: {profileUser.points} points
                                     </p>
                                     <p className="text-sm text-gray-500">
                                         Joined {new Date(profileUser.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
@@ -330,9 +330,9 @@ export default function ProfilePage() {
                                         </div>
                                         {/* Challenge status badge with color coding */}
                                         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${challenge.status === 'accepted' ? 'bg-green-100 text-green-700' :
-                                                challenge.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                                    challenge.status === 'cancelled' ? 'bg-gray-100 text-gray-700' :
-                                                        'bg-red-100 text-red-700'  // rejected
+                                            challenge.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                                challenge.status === 'cancelled' ? 'bg-gray-100 text-gray-700' :
+                                                    'bg-red-100 text-red-700'  // rejected
                                             }`}>
                                             {challenge.status.toUpperCase()}
                                         </span>

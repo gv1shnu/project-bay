@@ -47,10 +47,11 @@ export default function SignupPage() {
     try {
       // signup() registers + auto-logs in (see AuthContext)
       // If signup throws, the catch block below handles it.
-      await signup(email, password, username)
+      await signup(username, email, password)
       navigate('/')  // Redirect to homepage on success
-    } catch (err) {
-      setError('An error occurred. Please try again.')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'An error occurred'
+      setError(message)
     } finally {
       setLoading(false)
     }

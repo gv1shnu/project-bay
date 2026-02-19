@@ -15,6 +15,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import BetCard from '../components/BetCard'
+import BetDetailModal from '../components/BetDetailModal'
 import ChallengeOverlay from '../components/ChallengeOverlay'
 import AuthPrompt from '../components/AuthPrompt'
 import CreateBetModal from '../components/CreateBetModal'
@@ -38,11 +39,14 @@ export default function HomePage() {
   const { user, logout, isAuthenticated, refreshUser } = useAuth()
   const [createBetError, setCreateBetError] = useState<string | null>(null)  // Error from create bet API
   const [proofBetId, setProofBetId] = useState<number | null>(null) // Bet ID for proof upload modal
+  const [unreadCount, setUnreadCount] = useState(0)                 // Unread notification count (bell badge)
+  const [detailBet, setDetailBet] = useState<Bet | null>(null)       // Bet shown in detail modal (null = closed)
 
   // Fetch bets on mount + auto-refresh every 30 seconds
   useEffect(() => {
     fetchBets()
-    const interval = setInterval(fetchBets, 30000)
+    fetchUnreadCount()
+    const interval = setInterval(() => { fetchBets(); fetchUnreadCount() }, 30000)
     return () => clearInterval(interval)
   }, [])
 
@@ -65,6 +69,15 @@ export default function HomePage() {
     }
   }
 
+  /** Fetch unread notification count for the bell badge */
+  const fetchUnreadCount = async () => {
+    if (!isAuthenticated) return
+    const response = await apiService.getUnreadCount()
+    if (response.data) {
+      setUnreadCount(response.data.count)
+    }
+  }
+
   /**
    * Client-side search filter using useMemo for performance.
    * Only shows active bets. Filters by title, criteria, or username.
@@ -72,7 +85,7 @@ export default function HomePage() {
    */
   const filteredBets = useMemo(() => {
     let result = bets.filter(bet =>
-      bet.status === 'active' || bet.status === 'awaiting_proof' || bet.status === 'proof_under_review'
+      bet.status === 'active' || bet.status === 'proof_under_review'
     )
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
@@ -133,14 +146,44 @@ export default function HomePage() {
     }
   }
 
-  /** Handle star button — increment star count and refresh (optimistic update) */
+  /** Handle star button — toggle star with optimistic update */
   const handleStar = async (betId: number) => {
-    // Optimistic update: increment locally first for instant feedback
-    setBets(prev => prev.map(b => b.id === betId ? { ...b, stars: (b.stars || 0) + 1 } : b))
+    if (!isAuthenticated) {
+      setShowAuthPrompt(true)
+      return
+    }
+    const userId = user?.id
+    if (!userId) return
+
+    // Optimistic toggle
+    setBets(prev => prev.map(b => {
+      if (b.id !== betId) return b
+      const alreadyStarred = b.starred_by_user_ids?.includes(userId)
+      return {
+        ...b,
+        stars: alreadyStarred ? Math.max((b.stars || 0) - 1, 0) : (b.stars || 0) + 1,
+        starred_by_user_ids: alreadyStarred
+          ? (b.starred_by_user_ids || []).filter(id => id !== userId)
+          : [...(b.starred_by_user_ids || []), userId]
+      }
+    }))
+    // Also update detailBet if it matches
+    setDetailBet(prev => {
+      if (!prev || prev.id !== betId) return prev
+      const alreadyStarred = prev.starred_by_user_ids?.includes(userId)
+      return {
+        ...prev,
+        stars: alreadyStarred ? Math.max((prev.stars || 0) - 1, 0) : (prev.stars || 0) + 1,
+        starred_by_user_ids: alreadyStarred
+          ? (prev.starred_by_user_ids || []).filter(id => id !== userId)
+          : [...(prev.starred_by_user_ids || []), userId]
+      }
+    })
+
     const response = await apiService.starBet(betId)
     if (!response.data) {
       // Revert on failure
-      setBets(prev => prev.map(b => b.id === betId ? { ...b, stars: (b.stars || 0) - 1 } : b))
+      fetchBets()
     }
   }
 
@@ -207,6 +250,10 @@ export default function HomePage() {
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                     </svg>
+                    {/* Red dot — unread notification indicator */}
+                    {unreadCount > 0 && (
+                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white" />
+                    )}
                   </button>
                   <button
                     onClick={logout}
@@ -301,10 +348,8 @@ export default function HomePage() {
                 <BetCard
                   key={bet.id}
                   bet={bet}
-                  onChallenge={() => handleChallengeClick(bet.id)}
-                  onDismiss={() => handleDismiss(bet.id)}
+                  onCardClick={() => setDetailBet(bet)}
                   onStar={() => handleStar(bet.id)}
-                  onUploadProof={bet.status === 'awaiting_proof' ? () => setProofBetId(bet.id) : undefined}
                 />
               ))}
             </div>
@@ -361,12 +406,24 @@ export default function HomePage() {
         return proofBet ? (
           <ProofUploadModal
             betTitle={proofBet.title}
-            proofDeadline={proofBet.proof_deadline || proofBet.deadline}
+            proofDeadline={proofBet.deadline}
             onClose={() => setProofBetId(null)}
             onSubmit={handleProofSubmit}
           />
         ) : null
       })()}
+
+      {/* Bet detail modal — shown when clicking a compact BetCard */}
+      {detailBet && (
+        <BetDetailModal
+          bet={detailBet}
+          onClose={() => setDetailBet(null)}
+          onChallenge={() => { setDetailBet(null); handleChallengeClick(detailBet.id) }}
+          onDismiss={() => { setDetailBet(null); handleDismiss(detailBet.id) }}
+          onStar={() => handleStar(detailBet.id)}
+          onUploadProof={detailBet.status === 'active' ? () => { setDetailBet(null); setProofBetId(detailBet.id) } : undefined}
+        />
+      )}
 
       {/* ══════════════ Footer ══════════════ */}
       {userCount > 0 && (
