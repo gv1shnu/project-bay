@@ -9,7 +9,7 @@ Relationships:
   Bet   →  many Challenges (one bet can have many challengers)
   User  →  many Challenges (one user can challenge many bets)
 """
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -18,8 +18,7 @@ from app.database import Base
 
 class BetStatus(str, enum.Enum):
     """Possible lifecycle states for a bet."""
-    ACTIVE = "active"                       # Bet is open — can receive challenges
-    AWAITING_PROOF = "awaiting_proof"       # Deadline passed — creator has 1hr to upload proof
+    ACTIVE = "active"                       # Bet is open — can receive challenges and proof
     PROOF_UNDER_REVIEW = "proof_under_review"  # Proof uploaded — waiting for review
     WON = "won"                             # Creator completed their commitment
     LOST = "lost"                           # Creator failed — challengers win
@@ -48,7 +47,22 @@ class User(Base):
 
     # One user can create many bets
     bets = relationship("Bet", back_populates="user")
+    notifications = relationship("Notification", back_populates="user")
 
+
+class Notification(Base):
+    """In-app notification for a user (e.g. 'Proof uploaded for a bet you challenged')."""
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # Who receives this
+    message = Column(String, nullable=False)                            # Human-readable message
+    bet_id = Column(Integer, ForeignKey("bets.id"), nullable=True)     # Related bet, if any
+    is_read = Column(Integer, default=0, nullable=False)               # 0 = unread, 1 = read
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="notifications")
+    bet = relationship("Bet")
 
 class Bet(Base):
     """A personal commitment that others can challenge with their points."""
@@ -72,6 +86,8 @@ class Bet(Base):
     # Relationships — allows bet.user and bet.challenges in queries
     user = relationship("User", back_populates="bets")
     challenges = relationship("Challenge", back_populates="bet")
+    proof_votes = relationship("ProofVote", back_populates="bet")
+    starred_by = relationship("BetStar", back_populates="bet")
 
 
 class Challenge(Base):
@@ -88,3 +104,31 @@ class Challenge(Base):
     # Relationships — allows challenge.bet and challenge.challenger in queries
     bet = relationship("Bet", back_populates="challenges")
     challenger = relationship("User")  # No back_populates — User doesn't need a .challenges list
+
+
+class ProofVote(Base):
+    """A challenger's vote on uploaded proof: 'cool' (approve) or 'not_cool' (reject)."""
+    __tablename__ = "proof_votes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bet_id = Column(Integer, ForeignKey("bets.id"), nullable=False)       # Which bet's proof is being voted on
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)     # Who is voting (must be accepted challenger)
+    vote = Column(String, nullable=False)                                  # "cool" or "not_cool"
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    bet = relationship("Bet", back_populates="proof_votes")
+    voter = relationship("User")
+
+
+class BetStar(Base):
+    """Tracks which users have starred which bets (for toggle behavior)."""
+    __tablename__ = "bet_stars"
+    __table_args__ = (UniqueConstraint("bet_id", "user_id", name="uq_bet_star"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    bet_id = Column(Integer, ForeignKey("bets.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    bet = relationship("Bet", back_populates="starred_by")
+    user = relationship("User")

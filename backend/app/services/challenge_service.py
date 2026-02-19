@@ -46,6 +46,16 @@ def create_challenge(
     # Can't challenge your own bet — that would be free money!
     if bet.user_id == user.id:
         raise HTTPException(status_code=400, detail="Cannot challenge your own bet")
+
+    # Check if user already has an active challenge (pending or accepted)
+    existing_challenge = db.query(models.Challenge).filter(
+        models.Challenge.bet_id == bet_id,
+        models.Challenge.challenger_id == user.id,
+        models.Challenge.status.in_([ChallengeStatus.PENDING, ChallengeStatus.ACCEPTED])
+    ).first()
+
+    if existing_challenge:
+        raise HTTPException(status_code=400, detail="You have already challenged this bet")
     
     # Check challenger has enough points
     validate_points(user, challenge_data.amount)

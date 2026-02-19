@@ -132,6 +132,8 @@ class BetWithUsername(BetResponse):
     """Extended bet response for the public feed — includes creator's username and challenges."""
     username: str
     challenges: List[ChallengeResponse] = []  # All non-rejected challenges
+    proof_votes: List["ProofVoteResponse"] = []  # Votes on proof (if status is proof_under_review)
+    starred_by_user_ids: List[int] = []  # User IDs who starred this bet
 
 
 class BetUpdate(BaseModel):
@@ -146,3 +148,36 @@ class PaginatedResponse(BaseModel, Generic[T]):
     page: int        # Current page number (1-indexed)
     limit: int       # Items per page
     pages: int       # Total number of pages
+
+
+# ──────────────────────────────────────────────────────────
+# Notification Schemas
+# ──────────────────────────────────────────────────────────
+
+class NotificationResponse(BaseModel):
+    """Response body for a single notification."""
+    id: int
+    user_id: int
+    message: str
+    bet_id: Optional[int] = None
+    is_read: int          # 0 = unread, 1 = read
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ──────────────────────────────────────────────────────────
+# Proof Vote Schemas
+# ──────────────────────────────────────────────────────────
+
+class ProofVoteResponse(BaseModel):
+    """Response body for a single proof vote."""
+    id: int
+    bet_id: int
+    user_id: int
+    username: str     # Resolved from User table
+    vote: str         # "cool" or "not_cool"
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
