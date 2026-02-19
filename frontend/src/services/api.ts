@@ -9,7 +9,7 @@
  *
  * All API calls go through this service — components never call fetch() directly.
  */
-import { User, Bet, Challenge } from '../types';
+import { User, Bet, Challenge, Notification } from '../types';
 
 // API base URL from environment variables (set in frontend/.env)
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -200,9 +200,9 @@ class ApiService {
     });
   }
 
-  /** Star a bet — increments its star count. No auth required. */
-  async starBet(betId: number): Promise<ApiResponse<{ id: number; stars: number }>> {
-    return this.request<{ id: number; stars: number }>(`/bets/${betId}/star`, {
+  /** Toggle star on a bet — stars if not starred, unstars if already starred. Requires auth. */
+  async starBet(betId: number): Promise<ApiResponse<{ id: number; stars: number; starred: boolean }>> {
+    return this.request<{ id: number; stars: number; starred: boolean }>(`/bets/${betId}/star`, {
       method: 'POST',
     });
   }
@@ -282,6 +282,50 @@ class ApiService {
   async getAdminBets(passphrase: string): Promise<ApiResponse<Bet[]>> {
     return this.request<Bet[]>('/admin/bets', {
       headers: { 'X-Admin-Passphrase': passphrase },
+    });
+  }
+
+
+  // ════════════════════════════════════════════════════════
+  // Notification Endpoints
+  // ════════════════════════════════════════════════════════
+
+  /** Get all notifications for the current user (newest first). */
+  async getNotifications(): Promise<ApiResponse<Notification[]>> {
+    return this.request<Notification[]>('/notifications/');
+  }
+
+  /** Get unread notification count (for the bell badge). */
+  async getUnreadCount(): Promise<ApiResponse<{ count: number }>> {
+    return this.request<{ count: number }>('/notifications/unread');
+  }
+
+  /** Mark a single notification as read. */
+  async markNotificationRead(id: number): Promise<ApiResponse<{ id: number; is_read: number }>> {
+    return this.request<{ id: number; is_read: number }>(`/notifications/${id}/read`, {
+      method: 'POST',
+    });
+  }
+
+  /** Mark all notifications as read. */
+  async markAllNotificationsRead(): Promise<ApiResponse<{ status: string }>> {
+    return this.request<{ status: string }>('/notifications/read-all', {
+      method: 'POST',
+    });
+  }
+
+
+  // ════════════════════════════════════════════════════════
+  // Proof Vote Endpoints
+  // ════════════════════════════════════════════════════════
+
+  /** Vote on proof: 'cool' (approve) or 'not_cool' (reject). */
+  async voteOnProof(betId: number, vote: 'cool' | 'not_cool'): Promise<ApiResponse<{
+    id: number; bet_id: number; vote: string;
+    cool_count: number; total_voters: number; votes_cast: number; bet_status: string;
+  }>> {
+    return this.request(`/bets/${betId}/vote?vote=${vote}`, {
+      method: 'POST',
     });
   }
 }

@@ -1,9 +1,9 @@
 /**
  * ProofUploadModal.tsx — Modal for uploading proof of bet completion.
  *
- * Shown when a bet is in "awaiting_proof" status and the current user
- * is the bet creator. Features:
- *   - Countdown timer showing remaining time in proof window
+ * Shown when a bet is "active" and the current user is the bet creator.
+ * Features:
+ *   - Countdown timer showing remaining time until bet deadline
  *   - Text area for comments explaining the proof
  *   - File picker for image/video evidence
  *   - Preview of selected media before upload
@@ -12,7 +12,7 @@ import { useState, useEffect, FormEvent, MouseEvent, useRef } from 'react'
 
 interface ProofUploadModalProps {
     betTitle: string
-    proofDeadline: string   // ISO date string — end of proof upload window
+    proofDeadline: string   // ISO date string — bet deadline (proof must be uploaded before this)
     onClose: () => void
     onSubmit: (comment: string, file: File) => Promise<void>
 }
@@ -35,8 +35,13 @@ export default function ProofUploadModal({ betTitle, proofDeadline, onClose, onS
     // Countdown timer — updates every second
     useEffect(() => {
         const update = () => {
-            const now = new Date().getTime()
-            const deadline = new Date(proofDeadline).getTime()
+            const now = Date.now()
+            // Backend sends UTC datetimes — ensure the string is parsed as UTC
+            // If no timezone indicator, append 'Z' so JS treats it as UTC
+            const deadlineStr = proofDeadline.endsWith('Z') || proofDeadline.includes('+')
+                ? proofDeadline
+                : proofDeadline + 'Z'
+            const deadline = new Date(deadlineStr).getTime()
             const diff = deadline - now
 
             if (diff <= 0) {
@@ -44,9 +49,10 @@ export default function ProofUploadModal({ betTitle, proofDeadline, onClose, onS
                 return
             }
 
-            const mins = Math.floor(diff / 60000)
+            const hours = Math.floor(diff / 3600000)
+            const mins = Math.floor((diff % 3600000) / 60000)
             const secs = Math.floor((diff % 60000) / 1000)
-            setTimeLeft(`${mins}m ${secs}s`)
+            setTimeLeft(hours > 0 ? `${hours}h ${mins}m ${secs}s` : `${mins}m ${secs}s`)
         }
 
         update()
@@ -94,7 +100,7 @@ export default function ProofUploadModal({ betTitle, proofDeadline, onClose, onS
         }
 
         if (timeLeft === 'Expired') {
-            setError('Proof window has expired')
+            setError('Deadline has passed — proof can no longer be uploaded')
             return
         }
 
@@ -144,7 +150,7 @@ export default function ProofUploadModal({ betTitle, proofDeadline, onClose, onS
                     }`}>
                     <span className="text-lg">⏱️</span>
                     <span className="font-semibold">
-                        {timeLeft === 'Expired' ? 'Proof window expired' : `Time remaining: ${timeLeft}`}
+                        {timeLeft === 'Expired' ? 'Deadline has passed' : `Time remaining: ${timeLeft}`}
                     </span>
                 </div>
 
