@@ -143,13 +143,16 @@ def accept_challenge(
         raise HTTPException(status_code=400, detail="Challenge already processed")
     
     # Creator must have enough points to match the challenger's stake
-    validate_points(user, challenge.amount)
+    # [POOL UPDATE] Creator does NOT match stake anymore. They stake once at creation.
+    # validate_points(user, challenge.amount)  <-- REMOVED
     
     # Deduct matching stake from the bet creator
-    user.points = int(user.points) - challenge.amount
+    # user.points = int(user.points) - challenge.amount  <-- REMOVED
     
-    # Increase the bet's total matched amount
-    bet.amount = int(bet.amount) + challenge.amount
+    # [POOL UPDATE] bet.amount represents CREATOR STAKE only. 
+    # Total pot = bet.amount + sum(active_challenges).
+    # So we do NOT increment bet.amount here.
+    # bet.amount = int(bet.amount) + challenge.amount  <-- REMOVED
     
     # Mark the challenge as accepted — now both sides are committed
     challenge.status = ChallengeStatus.ACCEPTED

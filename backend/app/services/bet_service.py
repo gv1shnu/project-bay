@@ -185,20 +185,33 @@ def resolve_bet(
     total_challenger_stake = sum(c.amount for c in accepted_challenges)
     
     if new_status == BetStatus.WON:
-        # ✅ Creator wins: gets back their own stake + takes all challenger stakes
+        # Creator wins: gets back their own stake + takes all challenger stakes
+        # [POOL UPDATE] Creator gets their stake (bet.amount) + all challenger stakes
         user.points = int(user.points) + bet.amount + total_challenger_stake
-        logger.info(f"User {user.username} won bet {bet_id}, won {total_challenger_stake} points")
+        logger.info(f"User {user.username} won bet {bet_id}, won {total_challenger_stake} points (Total: {bet.amount + total_challenger_stake})")
         
     elif new_status == BetStatus.LOST:
-        # ❌ Creator loses: each accepted challenger gets their stake back + matches the winnings (2x)
-        for challenge in accepted_challenges:
-            challenger = db.query(models.User).filter(models.User.id == challenge.challenger_id).first()
-            # Challenger gets 2x: their original stake (refund) + creator's matching amount (winnings)
-            challenger.points = int(challenger.points) + (challenge.amount * 2)
-            logger.info(f"Challenger {challenger.username} won {challenge.amount * 2} points from bet {bet_id}")
+        # Creator loses: Challengers split the Creator's stake proportionally
+        # [POOL UPDATE] Proportional Risk Model
+        # Formula: Payout = ChallengerStake + (ChallengerStake / TotalChallengerStake) * CreatorStake
+        
+        if total_challenger_stake > 0:
+            for challenge in accepted_challenges:
+                challenger = db.query(models.User).filter(models.User.id == challenge.challenger_id).first()
+                
+                # Calculate share of the creator's stake
+                share = (challenge.amount / total_challenger_stake) * bet.amount
+                payout = challenge.amount + math.floor(share) # Floor to avoid fractional points
+                
+                challenger.points = int(challenger.points) + int(payout)
+                logger.info(f"Challenger {challenger.username} won {payout - challenge.amount} points from bet {bet_id} (Stake: {challenge.amount}, Share: {share:.2f})")
+        else:
+            # Edge case: Creator lost but no challengers?
+            # Creator loses stake. It disappears (burned).
+            logger.info(f"Bet {bet_id} lost but no challengers. {bet.amount} points burned.")
             
     elif new_status == BetStatus.CANCELLED:
-        # 🔄 Cancelled: full refund to everyone
+        # Cancelled: full refund to everyone
         
         # Refund the creator's stake
         user.points = int(user.points) + bet.amount
