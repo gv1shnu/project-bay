@@ -66,21 +66,34 @@ class DeadlineChecker:
 
             for bet in expired_active:
                 bet.status = BetStatus.LOST
-                # Distribute points to accepted challengers (2× their stake)
+                # Distribute points to accepted challengers (Proportional Risk)
                 accepted_challenges = [
                     c for c in bet.challenges if c.status == ChallengeStatus.ACCEPTED
                 ]
-                for challenge in accepted_challenges:
-                    challenger = db.query(models.User).filter(
-                        models.User.id == challenge.challenger_id
-                    ).first()
-                    if challenger:
-                        challenger.points = int(challenger.points) + (challenge.amount * 2)
-                        logger.info(
-                            "Auto-loss: Challenger %s won %d pts from bet %d",
-                            challenger.username, challenge.amount * 2, bet.id
-                        )
-                logger.info("Bet %d → LOST (deadline passed without proof)", bet.id)
+                
+                total_challenger_stake = sum(c.amount for c in accepted_challenges)
+                
+                if total_challenger_stake > 0:
+                    for challenge in accepted_challenges:
+                        challenger = db.query(models.User).filter(
+                            models.User.id == challenge.challenger_id
+                        ).first()
+                        
+                        if challenger:
+                            # Formula: Payout = ChallengerStake + (ChallengerStake / TotalChallengerStake) * CreatorStake
+                            import math  # Ensure math is imported or available in scope (adding import to be safe)
+                            share = (challenge.amount / total_challenger_stake) * bet.amount
+                            payout = challenge.amount + math.floor(share)
+                            
+                            challenger.points = int(challenger.points) + int(payout)
+                            logger.info(
+                                "Auto-loss: Challenger %s won %d pts from bet %d (Stake: %d, Share: %.2f)",
+                                challenger.username, payout - challenge.amount, bet.id, challenge.amount, share
+                            )
+                else:
+                    logger.info("Bet %d auto-lost (deadline) but no challengers. Points burned.", bet.id)
+
+                logger.info("Bet %d -> LOST (deadline passed without proof)", bet.id)
                 changed = True
 
             if changed:
