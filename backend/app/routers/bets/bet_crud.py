@@ -15,8 +15,8 @@ import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Request, Query, status, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+# from slowapi import Limiter
+# from slowapi.util import get_remote_address
 from app import models, schemas
 from app.models import BetStatus
 from app.auth import get_current_user
@@ -36,7 +36,7 @@ from app.logging_config import get_logger
 logger = get_logger(__name__)
 
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
+# limiter = Limiter(key_func=get_remote_address)
 
 # Allowed file types for proof upload
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".mov", ".webm"}
@@ -45,7 +45,7 @@ MAX_FILE_SIZE = 10 * 1024 * 1024
 
 
 @router.post("/", response_model=schemas.BetResponse, status_code=status.HTTP_201_CREATED)
-@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 async def create_bet_endpoint(
     request: Request,
     bet: schemas.BetCreate,
@@ -74,7 +74,7 @@ async def create_bet_endpoint(
 
 
 @router.get("/public", response_model=schemas.PaginatedResponse[schemas.BetWithUsername])
-@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def get_public_bets(
     request: Request,
     page: int = Query(1, ge=1),           # Page number, starts at 1
@@ -91,7 +91,7 @@ def get_public_bets(
 
 
 @router.get("/", response_model=schemas.PaginatedResponse[schemas.BetResponse])
-@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def get_bets(
     request: Request,
     page: int = Query(1, ge=1),
@@ -109,7 +109,7 @@ def get_bets(
 
 
 @router.get("/{bet_id}", response_model=schemas.BetResponse)
-@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def get_bet(
     request: Request,
     bet_id: int,
@@ -120,7 +120,7 @@ def get_bet(
 
 
 @router.post("/{bet_id}/star")
-@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def toggle_star(
     request: Request,
     bet_id: int,
@@ -151,7 +151,7 @@ def toggle_star(
 
 
 @router.post("/{bet_id}/proof")
-@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 async def upload_proof(
     request: Request,
     bet_id: int,
@@ -242,7 +242,7 @@ async def upload_proof(
 
 
 @router.post("/{bet_id}/vote")
-@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def vote_on_proof(
     request: Request,
     bet_id: int,

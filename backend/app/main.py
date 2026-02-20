@@ -9,9 +9,9 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
+# from slowapi import Limiter, _rate_limit_exceeded_handler
+# from slowapi.util import get_remote_address
+# from slowapi.errors import RateLimitExceeded
 from app.database import engine, Base, SessionLocal
 from app.routers import auth
 from app.routers.bets import router as bets_router
@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
 
 
 # Rate limiter — throttles requests per IP to prevent abuse
-limiter = Limiter(key_func=get_remote_address, enabled=settings.RATELIMIT_ENABLED)
+# limiter = Limiter(key_func=get_remote_address, enabled=settings.RATELIMIT_ENABLED)
 
 # Create the FastAPI app instance with OpenAPI metadata
 app = FastAPI(
@@ -62,9 +62,9 @@ app = FastAPI(
 )
 
 # Attach rate limiter to app state so it's accessible in routes
-app.state.limiter = limiter
+# app.state.limiter = limiter
 # Register global exception handlers for rate limits and custom API errors
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_exception_handler(BettingAPIException, betting_api_exception_handler)
 
 # CORS — allow frontend dev servers to talk to the API
