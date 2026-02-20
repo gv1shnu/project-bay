@@ -9,19 +9,19 @@ Endpoints:
 """
 from fastapi import APIRouter, Depends, Request, HTTPException
 from sqlalchemy.orm import Session
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+# from slowapi import Limiter
+# from slowapi.util import get_remote_address
 from app import models, schemas
 from app.auth import get_current_user
 from app.database import get_db
 from app.config import settings
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
-limiter = Limiter(key_func=get_remote_address)
+# limiter = Limiter(key_func=get_remote_address)
 
 
 @router.get("/", response_model=list[schemas.NotificationResponse])
-@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def get_notifications(
     request: Request,
     current_user: models.User = Depends(get_current_user),
@@ -38,7 +38,7 @@ def get_notifications(
 
 
 @router.get("/unread", response_model=dict)
-@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def get_unread_count(
     request: Request,
     current_user: models.User = Depends(get_current_user),
@@ -57,7 +57,7 @@ def get_unread_count(
 
 
 @router.post("/{notification_id}/read")
-@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def mark_as_read(
     request: Request,
     notification_id: int,
@@ -79,7 +79,7 @@ def mark_as_read(
 
 
 @router.post("/read-all")
-@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def mark_all_as_read(
     request: Request,
     current_user: models.User = Depends(get_current_user),

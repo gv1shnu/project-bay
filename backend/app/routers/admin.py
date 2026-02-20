@@ -10,14 +10,14 @@ Endpoints:
 """
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session, joinedload
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+# from slowapi import Limiter
+# from slowapi.util import get_remote_address
 from app import models, schemas
 from app.database import get_db
 from app.config import settings
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-limiter = Limiter(key_func=get_remote_address)
+# limiter = Limiter(key_func=get_remote_address)
 
 
 def verify_admin_passphrase(x_admin_passphrase: str = Header(...)):
@@ -27,14 +27,14 @@ def verify_admin_passphrase(x_admin_passphrase: str = Header(...)):
 
 
 @router.post("/verify")
-@limiter.limit("10/minute")
+# @limiter.limit("10/minute")
 def verify_passphrase(request: Request, _: None = Depends(verify_admin_passphrase)):
     """Verify the admin passphrase without fetching data. Used by the frontend gate."""
     return {"status": "ok"}
 
 
 @router.get("/users")
-@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def get_all_users(
     request: Request,
     db: Session = Depends(get_db),
@@ -55,7 +55,7 @@ def get_all_users(
 
 
 @router.get("/bets")
-@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def get_all_bets(
     request: Request,
     db: Session = Depends(get_db),
