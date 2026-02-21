@@ -15,8 +15,6 @@ from app.services.bet_service import (
 from app.services.challenge_service import (
     create_challenge,
     get_challenges_for_bet,
-    accept_challenge,
-    reject_challenge,
 )
 
 # Explicit public API — controls what "from app.services import *" exports
@@ -29,6 +27,4 @@ __all__ = [
     "resolve_bet",
     "create_challenge",
     "get_challenges_for_bet",
-    "accept_challenge",
-    "reject_challenge",
 ]

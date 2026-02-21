@@ -67,14 +67,14 @@ class DeadlineChecker:
             for bet in expired_active:
                 bet.status = BetStatus.LOST
                 # Distribute points to accepted challengers (Proportional Risk)
-                accepted_challenges = [
-                    c for c in bet.challenges if c.status == ChallengeStatus.ACCEPTED
+                active_challenges = [
+                    c for c in bet.challenges if c.status == ChallengeStatus.PENDING
                 ]
                 
-                total_challenger_stake = sum(c.amount for c in accepted_challenges)
+                total_challenger_stake = sum(c.amount for c in active_challenges)
                 
                 if total_challenger_stake > 0:
-                    for challenge in accepted_challenges:
+                    for challenge in active_challenges:
                         challenger = db.query(models.User).filter(
                             models.User.id == challenge.challenger_id
                         ).first()

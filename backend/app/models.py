@@ -19,7 +19,7 @@ from app.database import Base
 class BetStatus(str, enum.Enum):
     """Possible lifecycle states for a bet."""
     ACTIVE = "active"                       # Bet is open — can receive challenges and proof
-    PROOF_UNDER_REVIEW = "proof_under_review"  # Proof uploaded — waiting for review
+    PENDING = "pending"                     # Proof uploaded — waiting for review
     WON = "won"                             # Creator completed their commitment
     LOST = "lost"                           # Creator failed — challengers win
     CANCELLED = "cancelled"                 # Creator cancelled — everyone gets refunded
@@ -27,10 +27,10 @@ class BetStatus(str, enum.Enum):
 
 class ChallengeStatus(str, enum.Enum):
     """Possible states for a challenge against a bet."""
-    PENDING = "pending"       # Waiting for bet creator to accept/reject
-    ACCEPTED = "accepted"     # Creator accepted — stakes are locked in
-    REJECTED = "rejected"     # Creator rejected — challenger gets refund
-    CANCELLED = "cancelled"   # Bet was cancelled — auto-refunded
+    PENDING = "pending"       # Active bet or waiting for proof review
+    WON = "won"               # Creator lost — challenger gets payout
+    LOST = "lost"             # Creator won — challenger loses stake
+    WITHDREW = "withdrew"     # Challenger withdrew before deadline
 
 
 class User(Base):
