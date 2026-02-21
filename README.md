@@ -100,9 +100,9 @@ Auth:     JWT (OAuth2 password flow)
 - [ ] Friends network
 - [X] Proof upload
 - [x] add notification icon
-- [ ] Configuring POC
+- [X] Configuring POC
 - [x] Win/loss decision
-- [ ] Abuse prevention (using LLM)
+- [X] Abuse prevention (using LLM)
 - [x] Add star button to card
 - [x] Sort the feed by stars
 - [x] Credit/refund points

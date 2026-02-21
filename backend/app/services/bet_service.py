@@ -55,6 +55,15 @@ def create_bet(
     db.add(db_bet)
     db.commit()
     db.refresh(db_bet)   # Get auto-generated id and timestamps
+    
+    # Enqueue LLM validation
+    queue_item = models.BetValidationQueue(
+        bet_id=db_bet.id,
+        status=models.QueueStatus.PENDING
+    )
+    db.add(queue_item)
+    db.commit()
+    
     db.refresh(user)     # Get updated points balance
     
     logger.info(f"User {user.username} created bet {db_bet.id} with {bet_data.amount} points stake")
