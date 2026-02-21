@@ -20,8 +20,7 @@ from app.config import settings
 from app.services.challenge_service import (
     create_challenge,
     get_challenges_for_bet,
-    accept_challenge,
-    reject_challenge,
+    withdraw_challenge,
 )
 
 router = APIRouter()
@@ -55,9 +54,9 @@ def get_challenges(
     return get_challenges_for_bet(db, bet_id)
 
 
-@router.post("/{bet_id}/challenges/{challenge_id}/accept", response_model=schemas.ChallengeResponse)
-@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
-def accept_challenge_endpoint(
+@router.post("/{bet_id}/challenges/{challenge_id}/withdraw", response_model=schemas.ChallengeResponse)
+# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+def withdraw_challenge_endpoint(
     request: Request,
     bet_id: int,
     challenge_id: int,
@@ -65,24 +64,7 @@ def accept_challenge_endpoint(
     db: Session = Depends(get_db)
 ):
     """
-    Accept a challenge — only the bet creator can do this.
-    Creator must match the challenger's stake (deducted from creator's points).
-    The bet's total amount increases accordingly.
+    Withdraw a challenge — only the challenger can do this.
+    Cancels the individual challenge and refunds stakes appropriately.
     """
-    return accept_challenge(db, current_user, bet_id, challenge_id)
-
-
-@router.post("/{bet_id}/challenges/{challenge_id}/reject", response_model=schemas.ChallengeResponse)
-@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
-def reject_challenge_endpoint(
-    request: Request,
-    bet_id: int,
-    challenge_id: int,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Reject a challenge — only the bet creator can do this.
-    The challenger gets their staked points refunded.
-    """
-    return reject_challenge(db, current_user, bet_id, challenge_id)
+    return withdraw_challenge(db, current_user, bet_id, challenge_id)

@@ -69,10 +69,10 @@ export default function ProofReviewPage() {
     const hasVoted = bet?.proof_votes?.some(v => v.user_id === user?.id)
     const myVote = bet?.proof_votes?.find(v => v.user_id === user?.id)
     const isChallenger = bet?.challenges?.some(
-        c => c.challenger_id === user?.id && (c.status === 'accepted' || c.status === 'pending')
+        c => c.challenger_id === user?.id && c.status === 'pending'
     )
     const totalVotes = bet?.proof_votes?.length ?? 0
-    const totalVoters = bet?.challenges?.filter(c => c.status === 'accepted' || c.status === 'pending').length ?? 0
+    const totalVoters = bet?.challenges?.filter(c => c.status === 'pending').length ?? 0
 
     /** Determine media type from URL */
     const isVideo = (url: string) => /\.(mp4|mov|webm)$/i.test(url)
@@ -119,7 +119,7 @@ export default function ProofReviewPage() {
                 <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-100 p-6 mb-6">
                     <div className="flex items-center gap-2 mb-3">
                         <span className="text-xs font-bold px-2 py-1 rounded-full bg-yellow-100 text-yellow-800">
-                            {bet.status === 'proof_under_review' ? '🔍 Under Review' :
+                            {bet.status === 'pending' ? '🔍 Under Review' :
                                 bet.status === 'won' ? '✅ Won' :
                                     bet.status === 'lost' ? '❌ Lost' : bet.status}
                         </span>
@@ -171,7 +171,7 @@ export default function ProofReviewPage() {
                 </div>
 
                 {/* Vote section — only for challengers who haven't voted yet */}
-                {isChallenger && bet.status === 'proof_under_review' && !hasVoted && (
+                {isChallenger && bet.status === 'pending' && !hasVoted && (
                     <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-100 p-6 mb-6">
                         <h3 className="text-lg font-bold text-gray-800 mb-4">Cast your vote</h3>
                         <p className="text-sm text-gray-500 mb-6">
@@ -244,7 +244,7 @@ export default function ProofReviewPage() {
                         }`}>
                         {voteResult.bet_status === 'won' && '🎉 Bet resolved — Creator wins!'}
                         {voteResult.bet_status === 'lost' && '❌ Bet resolved — Creator loses!'}
-                        {voteResult.bet_status === 'proof_under_review' && `Vote recorded! (${voteResult.cool_count}/${voteResult.total_voters} COOL so far)`}
+                        {voteResult.bet_status === 'pending' && `Vote recorded! (${voteResult.cool_count}/${voteResult.total_voters} COOL so far)`}
                     </div>
                 )}
 

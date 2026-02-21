@@ -258,6 +258,12 @@ class ApiService {
     });
   }
 
+  /** Withdraw a challenge you made (refunds stakes). */
+  async withdrawChallenge(betId: number, challengeId: number): Promise<ApiResponse<Challenge>> {
+    return this.request<Challenge>(`/bets/${betId}/challenges/${challengeId}/withdraw`, {
+      method: 'POST',
+    });
+  }
 
   // ════════════════════════════════════════════════════════
   // Admin Endpoints (passphrase-protected)

@@ -15,7 +15,7 @@ export interface Bet {
   title: string;           // The personal commitment (e.g., "I will run 5km")
   amount: number;          // Creator's total matched stake (grows when challenges are accepted)
   criteria: string;        // How success will be measured
-  status: string;          // "active" | "proof_under_review" | "won" | "lost" | "cancelled"
+  status: string;          //   'active' | 'pending' | 'won' | 'lost' | 'cancelled';
   stars: number;           // Number of stars (likes)
   deadline: string;        // ISO date string for the bet deadline
   proof_comment?: string;       // Creator's proof description
@@ -40,7 +40,7 @@ export interface Challenge {
   challenger_id: number;
   challenger_username: string;  // Resolved from User table
   amount: number;               // Points staked by the challenger
-  status: string;               // "pending" | "accepted" | "rejected" | "cancelled"
+  status: 'won' | 'lost' | 'withdrew' | 'pending';
   created_at: string;
 }
 
