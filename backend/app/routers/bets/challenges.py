@@ -11,8 +11,8 @@ All mutations require authentication. Only the bet creator can accept/reject.
 """
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
-# from slowapi import Limiter
-# from slowapi.util import get_remote_address
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from app import models, schemas
 from app.auth import get_current_user
 from app.database import get_db
@@ -25,11 +25,11 @@ from app.services.challenge_service import (
 )
 
 router = APIRouter()
-# limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/{bet_id}/challenge", response_model=schemas.ChallengeResponse, status_code=status.HTTP_201_CREATED)
-# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def create_challenge_endpoint(
     request: Request,
     bet_id: int,
@@ -45,7 +45,7 @@ def create_challenge_endpoint(
 
 
 @router.get("/{bet_id}/challenges", response_model=list[schemas.ChallengeResponse])
-# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def get_challenges(
     request: Request,
     bet_id: int,
@@ -56,7 +56,7 @@ def get_challenges(
 
 
 @router.post("/{bet_id}/challenges/{challenge_id}/accept", response_model=schemas.ChallengeResponse)
-# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def accept_challenge_endpoint(
     request: Request,
     bet_id: int,
@@ -73,7 +73,7 @@ def accept_challenge_endpoint(
 
 
 @router.post("/{bet_id}/challenges/{challenge_id}/reject", response_model=schemas.ChallengeResponse)
-# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def reject_challenge_endpoint(
     request: Request,
     bet_id: int,

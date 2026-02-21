@@ -1,0 +1,5 @@
+backend/tests/** merge=ours
+backend/initdb/** merge=ours
+backend/pytest.ini merge=ours
+backend/requirements-dev.txt merge=ours
+PROJECT_STRUCTURE.md merge=ours
