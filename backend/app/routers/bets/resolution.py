@@ -9,8 +9,8 @@ Point distribution is handled by the service layer (bet_service.resolve_bet).
 """
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
-# from slowapi import Limiter
-# from slowapi.util import get_remote_address
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from app import models, schemas
 from app.auth import get_current_user
 from app.database import get_db
@@ -18,11 +18,11 @@ from app.config import settings
 from app.services.bet_service import resolve_bet
 
 router = APIRouter()
-# limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.patch("/{bet_id}", response_model=schemas.BetResponse)
-# @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 def update_bet_status(
     request: Request,
     bet_id: int,
