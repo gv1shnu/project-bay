@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # --- Logging ---
     LOG_LEVEL: str = "INFO"                   # DEBUG, INFO, WARNING, ERROR, CRITICAL
     LOG_FORMAT: str = "development"           # "development" = human-readable, "production" = JSON
+    
+    # --- LLM ---
+    GROQ_API_KEY: str                         # Required for LangGraph Groq API calls
 
     model_config = {
         "env_file": ".env",       # Auto-loads from backend/.env

@@ -13,7 +13,7 @@ import os
 import math
 import uuid
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, Request, Query, status, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, Request, Query, status, HTTPException, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.orm import Session
 # from slowapi import Limiter
 # from slowapi.util import get_remote_address
@@ -31,6 +31,7 @@ from app.services.bet_service import (
     get_public_bets_paginated,
 )
 from app.utils.validation import is_personal
+from app.utils.llm_validator import process_validation_queue
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -49,6 +50,7 @@ MAX_FILE_SIZE = 10 * 1024 * 1024
 async def create_bet_endpoint(
     request: Request,
     bet: schemas.BetCreate,
+    background_tasks: BackgroundTasks,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -69,6 +71,9 @@ async def create_bet_endpoint(
     
     # Step 3: Create the bet and deduct creator's stake
     db_bet = create_bet(db, current_user, bet)
+    
+    # Step 4: Schedule background LLM validation
+    background_tasks.add_task(process_validation_queue)
     
     return db_bet
 

@@ -33,6 +33,14 @@ class ChallengeStatus(str, enum.Enum):
     WITHDREW = "withdrew"     # Challenger withdrew before deadline
 
 
+class QueueStatus(str, enum.Enum):
+    """Possible states for background validation queue."""
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class User(Base):
     """User account. New users start with 10 points."""
     __tablename__ = "users"
@@ -132,3 +140,19 @@ class BetStar(Base):
 
     bet = relationship("Bet", back_populates="starred_by")
     user = relationship("User")
+
+
+class BetValidationQueue(Base):
+    """Queue system for tracking asynchronous LLM bet validation."""
+    __tablename__ = "bet_validation_queue"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bet_id = Column(Integer, ForeignKey("bets.id"), unique=True, nullable=False)
+    status = Column(Enum(QueueStatus), default=QueueStatus.PENDING, nullable=False)
+    result_raw = Column(String, nullable=True)                          # Store LLM JSON output or error
+    is_valid = Column(Integer, nullable=True)                           # 1 = valid, 0 = invalid
+    attempts = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    bet = relationship("Bet")
