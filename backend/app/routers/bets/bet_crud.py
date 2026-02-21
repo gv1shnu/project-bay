@@ -13,7 +13,7 @@ import os
 import math
 import uuid
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, Request, Query, status, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, Request, Query, status, HTTPException, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -31,6 +31,7 @@ from app.services.bet_service import (
     get_public_bets_paginated,
 )
 from app.utils.validation import is_personal
+from app.utils.llm_validator import process_validation_queue
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -49,6 +50,7 @@ MAX_FILE_SIZE = 10 * 1024 * 1024
 async def create_bet_endpoint(
     request: Request,
     bet: schemas.BetCreate,
+    background_tasks: BackgroundTasks,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -69,6 +71,9 @@ async def create_bet_endpoint(
     
     # Step 3: Create the bet and deduct creator's stake
     db_bet = create_bet(db, current_user, bet)
+    
+    # Step 4: Schedule background LLM validation
+    background_tasks.add_task(process_validation_queue)
     
     return db_bet
 
@@ -168,11 +173,11 @@ async def upload_proof(
         raise HTTPException(status_code=403, detail="Only the bet creator can upload proof")
 
     # Must have active challengers (pending or accepted) to upload proof
-    has_challengers = any(
-        c.status in (models.ChallengeStatus.PENDING, models.ChallengeStatus.ACCEPTED)
+    has_active_challengers = any(
+        c.status == models.ChallengeStatus.PENDING
         for c in bet.challenges
     )
-    if not has_challengers:
+    if not has_active_challengers:
         raise HTTPException(status_code=400, detail="Cannot upload proof without any challengers")
 
     # Bet must be ACTIVE (proof can be uploaded anytime before deadline)
@@ -212,14 +217,14 @@ async def upload_proof(
     bet.proof_comment = comment
     bet.proof_media_url = f"/uploads/{unique_name}"
     bet.proof_submitted_at = now
-    bet.status = BetStatus.PROOF_UNDER_REVIEW
+    bet.status = BetStatus.PENDING
 
     # Notify all active challengers (accepted + pending) that proof has been submitted
-    active_challenges = [
+    active_challengers_to_notify = [
         c for c in bet.challenges
-        if c.status in (models.ChallengeStatus.ACCEPTED, models.ChallengeStatus.PENDING)
+        if c.status == models.ChallengeStatus.PENDING
     ]
-    for challenge in active_challenges:
+    for challenge in active_challengers_to_notify:
         notif = models.Notification(
             user_id=challenge.challenger_id,
             message=f'@{current_user.username} uploaded proof for "{bet.title}"',
@@ -231,7 +236,7 @@ async def upload_proof(
     db.refresh(bet)
 
     feed_cache.invalidate()  # Status change affects feed
-    logger.info("Bet %d: proof uploaded by %s, status → PROOF_UNDER_REVIEW", bet_id, current_user.username)
+    logger.info("Bet %d: proof uploaded by %s, status -> PENDING", bet_id, current_user.username)
 
     return {
         "id": bet.id,
@@ -253,18 +258,18 @@ def vote_on_proof(
     """Vote on uploaded proof. Only accepted challengers can vote. Auto-resolves when majority reached."""
     bet = get_bet_by_id(db, bet_id)
 
-    # Bet must be in PROOF_UNDER_REVIEW status
-    if bet.status != BetStatus.PROOF_UNDER_REVIEW:
+    # Bet must be in PENDING status
+    if bet.status != BetStatus.PENDING:
         raise HTTPException(status_code=400, detail="Bet is not under proof review")
 
-    # Voter must be an active challenger (accepted or pending) on this bet
+    # Voter must be an active challenger (pending) on this bet
     active_challenges = [
         c for c in bet.challenges
-        if c.status in (models.ChallengeStatus.ACCEPTED, models.ChallengeStatus.PENDING)
+        if c.status == models.ChallengeStatus.PENDING
     ]
     eligible_voter_ids = {c.challenger_id for c in active_challenges}
     if current_user.id not in eligible_voter_ids:
-        raise HTTPException(status_code=403, detail="Only active challengers (accepted or pending) can vote on proof")
+        raise HTTPException(status_code=403, detail="Only active challengers (pending) can vote on proof")
 
     # Check if user already voted
     existing_vote = db.query(models.ProofVote).filter(
@@ -292,26 +297,25 @@ def vote_on_proof(
     resolved = False
 
     if cool_count > total_voters / 2:
-        # Majority voted COOL → creator wins
-        bet.status = BetStatus.WON
+        # Majority voted COOL -> creator wins
         creator = db.query(models.User).filter(models.User.id == bet.user_id).first()
-        total_challenger_stake = sum(c.amount for c in active_challenges)
-        creator.points = int(creator.points) + bet.amount + total_challenger_stake
-        logger.info("Bet %d auto-resolved → WON (COOL %d/%d)", bet_id, cool_count, total_voters)
+        from app.services.bet_service import resolve_bet
+        resolve_bet(db, creator, bet_id, BetStatus.WON)
+        logger.info("Bet %d auto-resolved -> WON (COOL %d/%d)", bet_id, cool_count, total_voters)
         resolved = True
 
     elif votes_cast >= total_voters:
-        # Everyone voted but COOL ≤ 50% → creator loses
-        bet.status = BetStatus.LOST
-        for challenge in active_challenges:
-            challenger = db.query(models.User).filter(models.User.id == challenge.challenger_id).first()
-            challenger.points = int(challenger.points) + (challenge.amount * 2)
-        logger.info("Bet %d auto-resolved → LOST (COOL %d/%d)", bet_id, cool_count, total_voters)
+        # Everyone voted but COOL <= 50% -> creator loses
+        creator = db.query(models.User).filter(models.User.id == bet.user_id).first()
+        from app.services.bet_service import resolve_bet
+        resolve_bet(db, creator, bet_id, BetStatus.LOST)
+        logger.info("Bet %d auto-resolved -> LOST (COOL %d/%d)", bet_id, cool_count, total_voters)
         resolved = True
 
-    db.commit()
-
-    if resolved:
+    # Note: resolve_bet commits within itself, so we don't need to commit again unless no resolution happened
+    if not resolved:
+        db.commit()
+    else:
         feed_cache.invalidate()
 
     return {

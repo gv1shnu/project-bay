@@ -47,11 +47,11 @@ def create_challenge(
     if bet.user_id == user.id:
         raise HTTPException(status_code=400, detail="Cannot challenge your own bet")
 
-    # Check if user already has an active challenge (pending or accepted)
+    # Check if user already has an active challenge (pending)
     existing_challenge = db.query(models.Challenge).filter(
         models.Challenge.bet_id == bet_id,
         models.Challenge.challenger_id == user.id,
-        models.Challenge.status.in_([ChallengeStatus.PENDING, ChallengeStatus.ACCEPTED])
+        models.Challenge.status == ChallengeStatus.PENDING
     ).first()
 
     if existing_challenge:
@@ -102,34 +102,28 @@ def get_challenges_for_bet(db: Session, bet_id: int) -> list[schemas.ChallengeRe
     ]
 
 
-def accept_challenge(
+def withdraw_challenge(
     db: Session,
     user: models.User,
     bet_id: int,
     challenge_id: int
 ) -> schemas.ChallengeResponse:
     """
-    Accept a challenge — only the bet creator can do this.
+    Withdraw a challenge — only the challenger can do this.
+    This cancels the individual challenge and refunds stakes appropriately.
     
     Flow:
-      1. Verify bet exists and user is the creator
-      2. Find the challenge and verify it's still PENDING
-      3. Deduct matching stake from creator (must have enough points)
-      4. Increase bet.amount (tracks total matched amount)
-      5. Mark challenge as ACCEPTED
-    
-    After accepting, the creator has matched the challenger's stake.
-    Both sides now have "skin in the game".
+      1. Verify bet exists and is ACTIVE.
+      2. Find the challenge and verify user is the challenger.
+      3. Verify challenge is PENDING or ACCEPTED.
+      4. If PENDING: refund challenger.
+      5. If ACCEPTED: refund challenger, and refund creator the matched stake safely.
+      6. Mark challenge as CANCELLED.
     """
     bet = db.query(models.Bet).filter(models.Bet.id == bet_id).first()
     if not bet:
         raise BetNotFoundError(bet_id)
-    
-    # Only the bet creator can accept challenges on their bet
-    if bet.user_id != user.id:
-        raise HTTPException(status_code=403, detail="Only bet creator can accept challenges")
-    
-    # Find the specific challenge
+        
     challenge = db.query(models.Challenge).filter(
         models.Challenge.id == challenge_id,
         models.Challenge.bet_id == bet_id
@@ -137,90 +131,33 @@ def accept_challenge(
     
     if not challenge:
         raise HTTPException(status_code=404, detail="Challenge not found")
+        
+    if challenge.challenger_id != user.id:
+        raise HTTPException(status_code=403, detail="Only the challenger can withdraw their challenge")
+        
+    if challenge.status != models.ChallengeStatus.PENDING:
+        raise HTTPException(status_code=400, detail="Can only withdraw pending challenges")
+        
+    # Check if bet is still ACTIVE
+    if bet.status != models.BetStatus.ACTIVE:
+        raise HTTPException(status_code=400, detail="Cannot withdraw from a bet that is no longer active")
+        
+    logger.info(f"User {user.username} withdrawing challenge {challenge_id} from bet {bet_id}")
     
-    # Can only accept PENDING challenges
-    if challenge.status != ChallengeStatus.PENDING:
-        raise HTTPException(status_code=400, detail="Challenge already processed")
-    
-    # Creator must have enough points to match the challenger's stake
-    # [POOL UPDATE] Creator does NOT match stake anymore. They stake once at creation.
-    # validate_points(user, challenge.amount)  <-- REMOVED
-    
-    # Deduct matching stake from the bet creator
-    # user.points = int(user.points) - challenge.amount  <-- REMOVED
-    
-    # [POOL UPDATE] bet.amount represents CREATOR STAKE only. 
-    # Total pot = bet.amount + sum(active_challenges).
-    # So we do NOT increment bet.amount here.
-    # bet.amount = int(bet.amount) + challenge.amount  <-- REMOVED
-    
-    # Mark the challenge as accepted — now both sides are committed
-    challenge.status = ChallengeStatus.ACCEPTED
+    # Refund logic based on challenge status
+    # PENDING: Creator hasn't matched yet. Only challenger staked points.
+    user.points = int(user.points) + challenge.amount
+    logger.info(f"Refunded {challenge.amount} points to challenger {user.username} (was PENDING)")
+
+    challenge.status = models.ChallengeStatus.WITHDREW
     
     db.commit()
     db.refresh(challenge)
     
-    logger.info(f"User {user.username} accepted challenge {challenge_id} for bet {bet_id}")
-    
     return schemas.ChallengeResponse(
         id=challenge.id, bet_id=challenge.bet_id,
         challenger_id=challenge.challenger_id,
-        challenger_username=challenge.challenger.username,
-        amount=challenge.amount, status=challenge.status,
-        created_at=challenge.created_at
-    )
-
-
-def reject_challenge(
-    db: Session,
-    user: models.User,
-    bet_id: int,
-    challenge_id: int
-) -> schemas.ChallengeResponse:
-    """
-    Reject a challenge — only the bet creator can do this.
-    
-    Flow:
-      1. Verify bet exists and user is the creator
-      2. Find the challenge and verify it's still PENDING
-      3. Refund the challenger's staked points
-      4. Mark challenge as REJECTED
-    """
-    bet = db.query(models.Bet).filter(models.Bet.id == bet_id).first()
-    if not bet:
-        raise BetNotFoundError(bet_id)
-    
-    # Only the bet creator can reject challenges
-    if bet.user_id != user.id:
-        raise HTTPException(status_code=403, detail="Only bet creator can reject challenges")
-    
-    challenge = db.query(models.Challenge).filter(
-        models.Challenge.id == challenge_id,
-        models.Challenge.bet_id == bet_id
-    ).first()
-    
-    if not challenge:
-        raise HTTPException(status_code=404, detail="Challenge not found")
-    
-    if challenge.status != ChallengeStatus.PENDING:
-        raise HTTPException(status_code=400, detail="Challenge already processed")
-    
-    # Refund the challenger — they get their staked points back
-    challenger = db.query(models.User).filter(models.User.id == challenge.challenger_id).first()
-    challenger.points = int(challenger.points) + challenge.amount
-    
-    # Mark as rejected
-    challenge.status = ChallengeStatus.REJECTED
-    
-    db.commit()
-    db.refresh(challenge)
-    
-    logger.info(f"User {user.username} rejected challenge {challenge_id} for bet {bet_id}")
-    
-    return schemas.ChallengeResponse(
-        id=challenge.id, bet_id=challenge.bet_id,
-        challenger_id=challenge.challenger_id,
-        challenger_username=challenge.challenger.username,
+        challenger_username=user.username,
         amount=challenge.amount, status=challenge.status,
         created_at=challenge.created_at
     )

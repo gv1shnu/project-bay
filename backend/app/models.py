@@ -19,7 +19,7 @@ from app.database import Base
 class BetStatus(str, enum.Enum):
     """Possible lifecycle states for a bet."""
     ACTIVE = "active"                       # Bet is open — can receive challenges and proof
-    PROOF_UNDER_REVIEW = "proof_under_review"  # Proof uploaded — waiting for review
+    PENDING = "pending"                     # Proof uploaded — waiting for review
     WON = "won"                             # Creator completed their commitment
     LOST = "lost"                           # Creator failed — challengers win
     CANCELLED = "cancelled"                 # Creator cancelled — everyone gets refunded
@@ -27,10 +27,18 @@ class BetStatus(str, enum.Enum):
 
 class ChallengeStatus(str, enum.Enum):
     """Possible states for a challenge against a bet."""
-    PENDING = "pending"       # Waiting for bet creator to accept/reject
-    ACCEPTED = "accepted"     # Creator accepted — stakes are locked in
-    REJECTED = "rejected"     # Creator rejected — challenger gets refund
-    CANCELLED = "cancelled"   # Bet was cancelled — auto-refunded
+    PENDING = "pending"       # Active bet or waiting for proof review
+    WON = "won"               # Creator lost — challenger gets payout
+    LOST = "lost"             # Creator won — challenger loses stake
+    WITHDREW = "withdrew"     # Challenger withdrew before deadline
+
+
+class QueueStatus(str, enum.Enum):
+    """Possible states for background validation queue."""
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class User(Base):
@@ -132,3 +140,19 @@ class BetStar(Base):
 
     bet = relationship("Bet", back_populates="starred_by")
     user = relationship("User")
+
+
+class BetValidationQueue(Base):
+    """Queue system for tracking asynchronous LLM bet validation."""
+    __tablename__ = "bet_validation_queue"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bet_id = Column(Integer, ForeignKey("bets.id"), unique=True, nullable=False)
+    status = Column(Enum(QueueStatus), default=QueueStatus.PENDING, nullable=False)
+    result_raw = Column(String, nullable=True)                          # Store LLM JSON output or error
+    is_valid = Column(Integer, nullable=True)                           # 1 = valid, 0 = invalid
+    attempts = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    bet = relationship("Bet")
