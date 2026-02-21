@@ -63,7 +63,7 @@ export default function ProfilePage() {
             if (profileResponse.data) {
                 setProfileUser({
                     points: profileResponse.data.points,
-                    created_at: profileResponse.data.created_at
+                    created_at: typeof profileResponse.data.created_at === 'string' ? profileResponse.data.created_at : String(profileResponse.data.created_at)
                 })
             }
         }
@@ -92,16 +92,14 @@ export default function ProfilePage() {
                     // Find challenges made by this profile user
                     bet.challenges.filter(c => c.challenger_username === username).forEach(c => {
                         challengesList.push({ bet, challenge: { id: c.id, amount: c.amount, status: c.status, created_at: c.created_at } })
-                        challengeTotal++
-                        if (c.status === 'accepted') {
-                            // Determine outcome by checking the BET's status:
-                            // Challenger wins when bet is LOST (creator failed)
-                            // Challenger loses when bet is WON (creator succeeded)
-                            if (bet.status === 'lost') challengeWon++
-                            else if (bet.status === 'won') challengeLost++
-                            else challengePending++  // Bet still active
-                        } else if (c.status === 'pending') {
-                            challengePending++
+
+                        // Only count non-withdrawn challenges in totals
+                        if (c.status !== 'withdrew') {
+                            challengeTotal++
+
+                            if (c.status === 'won') challengeWon++
+                            else if (c.status === 'lost') challengeLost++
+                            else if (c.status === 'pending') challengePending++
                         }
                     })
                 }
@@ -136,6 +134,18 @@ export default function ProfilePage() {
                 await fetchUserData()  // Refresh profile data
             } else {
                 alert(response.error || 'Failed to cancel bet')
+            }
+        }
+    }
+
+    /** Withdraw a challenge — confirms with user, calls API to withdraw, which cancels the individual challenge and refunds. */
+    const handleWithdrawChallenge = async (betId: number, challengeId: number) => {
+        if (confirm('Are you sure you want to withdraw this challenge? Your stake will be refunded.')) {
+            const response = await apiService.withdrawChallenge(betId, challengeId)
+            if (response.data) {
+                await fetchUserData() // Refresh to show refund and cancelled status
+            } else {
+                alert(response.error || 'Failed to withdraw challenge')
             }
         }
     }
@@ -275,10 +285,10 @@ export default function ProfilePage() {
                                                 Author stake: {bet.amount} pts
                                             </span>
                                             <span className="font-semibold text-competitive-dark">
-                                                {/* Total = author stake + all non-rejected challenger stakes */}
-                                                Total: {bet.amount + (bet.challenges?.filter(c => c.status !== 'rejected').reduce((sum, c) => sum + c.amount, 0) || 0)} pts
+                                                {/* Total = author stake + all non-withdrawn challenger stakes */}
+                                                Total: {bet.amount + (bet.challenges?.filter(c => c.status !== 'withdrew').reduce((sum, c) => sum + c.amount, 0) || 0)} pts
                                                 {/* Show winnings/losses indicator for resolved bets */}
-                                                {bet.status === 'won' && <span className="text-green-600 ml-1">(+{bet.challenges?.filter(c => c.status === 'accepted').reduce((sum, c) => sum + c.amount, 0) || 0})</span>}
+                                                {bet.status === 'won' && <span className="text-green-600 ml-1">(+{bet.challenges?.filter(c => c.status === 'lost').reduce((sum, c) => sum + c.amount, 0) || 0})</span>}
                                                 {bet.status === 'lost' && <span className="text-red-600 ml-1">(-{bet.amount})</span>}
                                             </span>
                                         </div>
@@ -317,38 +327,49 @@ export default function ProfilePage() {
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {userChallenges.map(({ bet, challenge }) => (
-                                <div
-                                    key={challenge.id}
-                                    className="border border-purple-100 rounded-xl p-4 hover:shadow-md transition-shadow"
-                                >
-                                    {/* Challenge info: bet title + challenge status */}
-                                    <div className="flex justify-between items-start mb-2">
-                                        <div>
-                                            <h3 className="font-semibold text-gray-800">{bet.title}</h3>
-                                            <p className="text-sm text-gray-500">by @{bet.username}</p>
+                            {userChallenges.map(({ bet, challenge }) => {
+                                return (
+                                    <div
+                                        key={challenge.id}
+                                        className="border border-purple-100 rounded-xl p-4 hover:shadow-md transition-shadow"
+                                    >
+                                        {/* Challenge info: bet title + challenge status */}
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <h3 className="font-semibold text-gray-800">{bet.title}</h3>
+                                                <p className="text-sm text-gray-500">by @{bet.username}</p>
+                                            </div>
+                                            {/* Challenge status badge */}
+                                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${challenge.status === 'won' ? 'bg-green-100 text-green-700' :
+                                                challenge.status === 'lost' ? 'bg-red-100 text-red-700' :
+                                                    challenge.status === 'withdrew' ? 'bg-gray-100 text-gray-700' :
+                                                        'bg-yellow-100 text-yellow-700'
+                                                }`}>
+                                                {challenge.status.toUpperCase()}
+                                            </span>
                                         </div>
-                                        {/* Challenge status badge with color coding */}
-                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${challenge.status === 'accepted' ? 'bg-green-100 text-green-700' :
-                                            challenge.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                                challenge.status === 'cancelled' ? 'bg-gray-100 text-gray-700' :
-                                                    'bg-red-100 text-red-700'  // rejected
-                                            }`}>
-                                            {challenge.status.toUpperCase()}
-                                        </span>
+                                        {/* Stake amount and outcome */}
+                                        <div className="flex justify-between text-sm text-gray-500 items-center">
+                                            <span className="font-semibold text-purple-600">
+                                                Staked {challenge.amount} pts
+                                            </span>
+                                            <div className="flex items-center gap-4">
+                                                <span>{new Date(challenge.created_at).toLocaleDateString()}</span>
+                                                {/* Withdraw button for own challenges on active bets */}
+                                                {isOwnProfile && bet.status === 'active' &&
+                                                    challenge.status === 'pending' && (
+                                                        <button
+                                                            onClick={() => handleWithdrawChallenge(bet.id, challenge.id)}
+                                                            className="px-3 py-1 bg-red-100 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-200 transition-colors"
+                                                        >
+                                                            Withdraw
+                                                        </button>
+                                                    )}
+                                            </div>
+                                        </div>
                                     </div>
-                                    {/* Stake amount and outcome */}
-                                    <div className="flex justify-between text-sm text-gray-500">
-                                        <span className="font-semibold text-purple-600">
-                                            Staked {challenge.amount} pts
-                                            {/* Outcome indicators — shown only for resolved bets */}
-                                            {bet.status === 'lost' && <span className="text-green-600 ml-1">(Won!)</span>}
-                                            {bet.status === 'won' && <span className="text-red-600 ml-1">(Lost)</span>}
-                                        </span>
-                                        <span>{new Date(challenge.created_at).toLocaleDateString()}</span>
-                                    </div>
-                                </div>
-                            ))}
+                                )
+                            })}
                         </div>
                     )}
                 </div>

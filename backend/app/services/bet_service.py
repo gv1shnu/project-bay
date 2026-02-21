@@ -125,7 +125,7 @@ def get_public_bets_paginated(
                 id=c.id, bet_id=c.bet_id, challenger_id=c.challenger_id,
                 challenger_username=c.challenger.username, amount=c.amount,
                 status=c.status, created_at=c.created_at
-            ) for c in bet.challenges if c.status != ChallengeStatus.REJECTED
+            ) for c in bet.challenges
         ]
         bets_with_data.append(schemas.BetWithUsername(
             id=bet.id, user_id=bet.user_id, title=bet.title, amount=bet.amount,
@@ -175,20 +175,23 @@ def resolve_bet(
         raise BetNotFoundError(bet_id)
     
     # Prevent resolving an already-resolved bet
-    if bet.status != BetStatus.ACTIVE:
+    if bet.status not in (BetStatus.ACTIVE, BetStatus.PENDING):
         raise HTTPException(status_code=400, detail="Bet already resolved")
     
     bet.status = new_status
     
-    # Get only ACCEPTED challenges — pending/rejected ones don't participate in resolution
-    accepted_challenges = [c for c in bet.challenges if c.status == ChallengeStatus.ACCEPTED]
-    total_challenger_stake = sum(c.amount for c in accepted_challenges)
+    # Get all active challenges (now just PENDING, since ACCEPTED/REJECTED are gone)
+    active_challenges = [c for c in bet.challenges if c.status == ChallengeStatus.PENDING]
+    total_challenger_stake = sum(c.amount for c in active_challenges)
     
     if new_status == BetStatus.WON:
         # Creator wins: gets back their own stake + takes all challenger stakes
-        # [POOL UPDATE] Creator gets their stake (bet.amount) + all challenger stakes
         user.points = int(user.points) + bet.amount + total_challenger_stake
         logger.info(f"User {user.username} won bet {bet_id}, won {total_challenger_stake} points (Total: {bet.amount + total_challenger_stake})")
+        
+        # Challengers lost their stakes. Mark their challenges as LOST
+        for challenge in active_challenges:
+            challenge.status = ChallengeStatus.LOST
         
     elif new_status == BetStatus.LOST:
         # Creator loses: Challengers split the Creator's stake proportionally
@@ -196,7 +199,7 @@ def resolve_bet(
         # Formula: Payout = ChallengerStake + (ChallengerStake / TotalChallengerStake) * CreatorStake
         
         if total_challenger_stake > 0:
-            for challenge in accepted_challenges:
+            for challenge in active_challenges:
                 challenger = db.query(models.User).filter(models.User.id == challenge.challenger_id).first()
                 
                 # Calculate share of the creator's stake
@@ -204,6 +207,7 @@ def resolve_bet(
                 payout = challenge.amount + math.floor(share) # Floor to avoid fractional points
                 
                 challenger.points = int(challenger.points) + int(payout)
+                challenge.status = ChallengeStatus.WON
                 logger.info(f"Challenger {challenger.username} won {payout - challenge.amount} points from bet {bet_id} (Stake: {challenge.amount}, Share: {share:.2f})")
         else:
             # Edge case: Creator lost but no challengers?
@@ -217,13 +221,12 @@ def resolve_bet(
         user.points = int(user.points) + bet.amount
         logger.info(f"Refunded {bet.amount} points to creator {user.id}")
         
-        # Refund all non-rejected challengers and mark their challenges as cancelled
-        for challenge in bet.challenges:
-            if challenge.status != ChallengeStatus.REJECTED:
-                challenger = db.query(models.User).filter(models.User.id == challenge.challenger_id).first()
-                challenger.points = int(challenger.points) + challenge.amount
-                challenge.status = ChallengeStatus.CANCELLED
-                logger.info(f"Refunded {challenge.amount} points to challenger {challenge.challenger_id}, challenge marked cancelled")
+        # Refund all active challengers and mark their challenges as WITHDREW
+        for challenge in active_challenges:
+            challenger = db.query(models.User).filter(models.User.id == challenge.challenger_id).first()
+            challenger.points = int(challenger.points) + challenge.amount
+            challenge.status = ChallengeStatus.WITHDREW
+            logger.info(f"Refunded {challenge.amount} points to challenger {challenge.challenger_id}, challenge marked withdrew")
         
         bet.status = BetStatus.CANCELLED
         logger.info(f"Bet {bet_id} cancelled, all stakes refunded")
