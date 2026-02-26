@@ -42,6 +42,7 @@ Frontend: React, TypeScript, Vite, Tailwind CSS
 Backend:  FastAPI, SQLAlchemy, Pydantic
 Database: PostgreSQL (via Docker)
 Auth:     JWT (OAuth2 password flow)
+Web3:     Hardhat, Escrow
 ```
 
 ---
@@ -50,7 +51,7 @@ Auth:     JWT (OAuth2 password flow)
 
 ### Prerequisites
 - Docker & Docker Compose
-- Node.js v18+
+- Node.js v20.20
 - Python 3.12+
 
 ### Installation
