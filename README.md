@@ -98,6 +98,7 @@ Auth:     JWT (OAuth2 password flow)
 ## To Do
 
 - [ ] Friends network
+- [ ] Convert points to float type
 - [X] Proof upload
 - [x] add notification icon
 - [X] Configuring POC
