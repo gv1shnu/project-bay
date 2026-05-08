@@ -7,7 +7,7 @@
 
 **Project BAY** is a social challenge platform where users stake personal commitments against friends using a virtual points system. Prove your discipline, challenge your friends, and track your wins.
 
-Current Status: Building the MVP.
+Current Status: Archived aka abandoned.
 
 ## Demo v1
 
