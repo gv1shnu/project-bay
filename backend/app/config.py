@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # --- LLM ---
     GROQ_API_KEY: str                         # Required for LangGraph Groq API calls
 
+    # --- Demo data ---
+    SEED_DEMO_DATA: bool = True               # On startup, populate demo data if the DB is empty. Set False in production.
+
     model_config = {
         "env_file": ".env",       # Auto-loads from backend/.env
         "case_sensitive": True    # Env var names are case-sensitive

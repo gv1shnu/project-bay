@@ -4,10 +4,10 @@ routers/bets/challenges.py — Challenge endpoints.
 Endpoints:
   POST /bets/{id}/challenge                    — Stake points against someone's bet
   GET  /bets/{id}/challenges                   — List all challenges for a bet
-  POST /bets/{id}/challenges/{cid}/accept      — Bet creator accepts a challenge
-  POST /bets/{id}/challenges/{cid}/reject      — Bet creator rejects (refunds challenger)
+  POST /bets/{id}/challenges/{cid}/withdraw    — Challenger pulls out (refunds their stake)
 
-All mutations require authentication. Only the bet creator can accept/reject.
+Challenges go live immediately — there is no creator accept/reject step.
+All mutations require authentication.
 """
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session

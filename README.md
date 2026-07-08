@@ -7,7 +7,9 @@
 
 **Project BAY** is a social challenge platform where users stake personal commitments against friends using a virtual points system. Prove your discipline, challenge your friends, and track your wins.
 
-Current Status: Archived aka abandoned.
+Points are virtual and have no monetary value — this is a motivation game, not a betting or money app.
+
+Current Status: MVP.
 
 ## Demo v1
 
@@ -26,14 +28,29 @@ Current Status: Archived aka abandoned.
 
 ---
 
+## How it works
+
+1. **Create** — You post a personal commitment ("I will run 5km today"), stake some points, and set the deadline and proof criteria.
+2. **Challenge** — People who follow you stake points betting you *won't* follow through. Their stakes join the pot. (You can only challenge people you follow.)
+3. **Prove** — Before the deadline you upload proof (photo/video + comment).
+4. **Verify** — Challengers review the proof:
+   - All approve → you win the whole pot.
+   - Anyone flags it → it goes to the Tribunal.
+5. **Tribunal** — Neutral users act as a jury; the first side to 3 votes decides it. The winning side pays a small court fee to the jurors who called it right.
+
+New users start with 10 points. If a review stalls, the creator wins automatically — funds are never trapped.
+
 ## Features
 
 - **Personal Commitments** — Set measurable goals (e.g., "Run 5k", "Read 30 pages")
-- **Social Challenges** — Friends can bet points that you *won't* follow through
+- **Follow graph** — Follow people to see their activity and challenge them; you can only challenge those you follow
+- **Social Challenges** — Followers stake points that you *won't* follow through
+- **Proof + Verification** — Upload proof; challengers review, disputes go to a public jury
+- **Proportional Payouts** — Challengers win a share of the pot in proportion to their stake
+- **AI Moderation** — Bets are checked to be personal, actionable, and safe (not predictions or abuse)
 - **Star System** — Community-curated feed sorted by popularity
 - **Admin Dashboard** — View all users and bets for platform management
 - **User Profiles** — Track wins, losses, and active challenges
-- **Validation** — Regex-based commitment validation ensuring quality bets
 
 ## Tech Stack
 
@@ -93,26 +110,23 @@ Auth:     JWT (OAuth2 password flow)
    npm run dev      (local)
    ```
 
----
+### Demo data
 
-## To Do
+On first run the backend auto-populates an empty database with demo users and
+bets across every state (active, under review, disputed, won, lost, cancelled)
+so the app looks alive immediately. Log in with any demo account —
+`alex`, `bella`, `chris`, `dana`, `evan`, `fiona`, `gina`, `hugo` — password
+`demo1234`.
 
-- [ ] Friends network
-- [ ] Convert points to float type
-- [X] Proof upload
-- [x] add notification icon
-- [X] Configuring POC
-- [x] Win/loss decision
-- [X] Abuse prevention (using LLM)
-- [x] Add star button to card
-- [x] Sort the feed by stars
-- [x] Credit/refund points
-- [x] Add cancel button
-- [x] Create an admin page
-- [x] Profile page
-- [x] Add deadline to card
-- [x] Search functionality
-- [x] Authentication (login/signup)
+Seed manually or reset:
+
+```bash
+cd backend
+python -m app.seed            # seed only if the DB is empty
+python -m app.seed --reset    # wipe everything, then reseed
+```
+
+Set `SEED_DEMO_DATA=false` to disable auto-seeding (recommended in production).
 
 ---
 
@@ -130,4 +144,4 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## Disclaimer
 
-Project not meant to be moderated.
+Points are virtual and carry no real-world or monetary value.

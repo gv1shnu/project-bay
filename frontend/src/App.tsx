@@ -16,6 +16,7 @@ import ProfilePage from './pages/ProfilePage';
 import AdminPage from './pages/AdminPage';
 import NotificationsPage from './pages/NotificationsPage';
 import ProofReviewPage from './pages/ProofReviewPage';
+import DisputesPage from './pages/DisputesPage';
 
 function App() {
   return (
@@ -39,8 +40,11 @@ function App() {
           {/* Admin dashboard — view all users and bets */}
           <Route path="/admin" element={<AdminPage />} />
 
-          {/* Proof review — challengers vote on uploaded proof */}
+          {/* Proof review — challengers vote on uploaded proof (Level 1) */}
           <Route path="/bets/:betId/proof" element={<ProofReviewPage />} />
+
+          {/* Tribunal — public jury votes on disputed proof (Level 2) */}
+          <Route path="/disputes" element={<DisputesPage />} />
 
           {/* Catch-all — redirect unknown paths to home */}
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -7,7 +7,7 @@
  *   - Challenged bets stats (total / won / lost / pending)
  *   - List of all bets the user created (with cancel option for own active bets)
  *   - List of all challenges the user made (with win/loss indicators)
- *   - "Add Friend" placeholder button (feature coming soon)
+ *   - Follow / Unfollow button + follower / following counts
  *   - Floating "+" button to create new bets
  *
  * Data source: Fetches ALL public bets, then filters for the profile user.
@@ -40,6 +40,9 @@ export default function ProfilePage() {
     const [profileUser, setProfileUser] = useState<{ points: number; created_at: string } | null>(null)
     const [showCreateBet, setShowCreateBet] = useState(false)
     const [showAuthPrompt, setShowAuthPrompt] = useState(false)
+    const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 })
+    const [isFollowing, setIsFollowing] = useState(false)
+    const [followBusy, setFollowBusy] = useState(false)
 
     // Is the logged-in user viewing their own profile?
     const isOwnProfile = user?.username === username
@@ -47,7 +50,34 @@ export default function ProfilePage() {
     // Re-fetch data when the username in the URL changes
     useEffect(() => {
         fetchUserData()
-    }, [username])
+        fetchFollowData()
+    }, [username, user?.username])
+
+    /** Load follower/following counts and (if logged in) whether we follow this user. */
+    const fetchFollowData = async () => {
+        if (!username) return
+        const counts = await apiService.getFollowCounts(username)
+        if (counts.data) setFollowCounts(counts.data)
+        if (user && user.username !== username) {
+            const status = await apiService.getFollowStatus(username)
+            if (status.data) setIsFollowing(status.data.following)
+        } else {
+            setIsFollowing(false)
+        }
+    }
+
+    /** Follow / unfollow this profile's user, then refresh counts. */
+    const handleToggleFollow = async () => {
+        if (!username || !user) return
+        setFollowBusy(true)
+        const res = isFollowing
+            ? await apiService.unfollowUser(username)
+            : await apiService.followUser(username)
+        if (res.data) setIsFollowing(res.data.following)
+        else if (res.error) alert(res.error)
+        await fetchFollowData()
+        setFollowBusy(false)
+    }
 
     /**
      * Fetch all profile data: user info, their bets, and their challenges.
@@ -184,6 +214,10 @@ export default function ProfilePage() {
                                     <p className="text-sm text-gray-500">
                                         Joined {new Date(profileUser.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                                     </p>
+                                    <div className="flex justify-center md:justify-start gap-4 mt-2 text-sm">
+                                        <span className="text-gray-700"><strong>{followCounts.followers}</strong> followers</span>
+                                        <span className="text-gray-700"><strong>{followCounts.following}</strong> following</span>
+                                    </div>
                                 </div>
                             )}
 
@@ -234,16 +268,22 @@ export default function ProfilePage() {
                             </div>
                         </div>
 
-                        {/* ── Add Friend button (placeholder — only shown on other users' profiles) ── */}
+                        {/* ── Follow / Unfollow (only on other users' profiles when logged in) ── */}
                         {!isOwnProfile && user && (
                             <div className="text-center">
                                 <button
-                                    onClick={() => alert('Friend feature coming soon!')}
-                                    className="px-6 py-3 bg-gradient-to-r from-friendly-dark to-friendly-DEFAULT text-white rounded-lg font-semibold hover:from-friendly-DEFAULT hover:to-friendly-light transition-all shadow-md hover:shadow-lg"
+                                    onClick={handleToggleFollow}
+                                    disabled={followBusy}
+                                    className={`px-6 py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50 ${isFollowing
+                                        ? 'bg-gray-100 text-gray-700 border-2 border-gray-300 hover:bg-gray-200'
+                                        : 'bg-gradient-to-r from-friendly-dark to-friendly-DEFAULT text-white hover:from-friendly-DEFAULT hover:to-friendly-light'
+                                        }`}
                                 >
-                                    Add Friend
+                                    {followBusy ? '...' : isFollowing ? 'Following ✓' : 'Follow'}
                                 </button>
-                                <p className="text-sm text-gray-500 mt-2">0 friends</p>
+                                <p className="text-sm text-gray-500 mt-2">
+                                    {isFollowing ? 'You can challenge them' : 'Follow to challenge them'}
+                                </p>
                             </div>
                         )}
                     </div>

@@ -1,14 +1,16 @@
 """
 services/challenge_service.py — Business logic for challenge operations.
 
-Handles: creating challenges, listing them, and accepting/rejecting them.
-Challenge lifecycle: PENDING → ACCEPTED or REJECTED (or CANCELLED if bet is cancelled)
+Handles: creating challenges, listing them, and withdrawing them.
+A challenge goes live the moment it's placed (points deducted immediately).
+Challenge lifecycle: PENDING → WON / LOST (on resolution) or WITHDREW (pulled out).
 """
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from app import models, schemas
 from app.models import BetStatus, ChallengeStatus
 from app.exceptions import BetNotFoundError
+from app.services.follow_service import is_following
 from app.services.bet_service import validate_points
 from app.logging_config import get_logger
 
@@ -46,6 +48,13 @@ def create_challenge(
     # Can't challenge your own bet — that would be free money!
     if bet.user_id == user.id:
         raise HTTPException(status_code=400, detail="Cannot challenge your own bet")
+
+    # Friends-only: you can only challenge people you follow (skin in the game).
+    if not is_following(db, user.id, bet.user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="You can only challenge people you follow — follow them first.",
+        )
 
     # Check if user already has an active challenge (pending)
     existing_challenge = db.query(models.Challenge).filter(
@@ -109,16 +118,14 @@ def withdraw_challenge(
     challenge_id: int
 ) -> schemas.ChallengeResponse:
     """
-    Withdraw a challenge — only the challenger can do this.
-    This cancels the individual challenge and refunds stakes appropriately.
-    
+    Withdraw a challenge — only the challenger can do this, and only while the
+    bet is still ACTIVE. Refunds the challenger's stake and marks it WITHDREW.
+
     Flow:
       1. Verify bet exists and is ACTIVE.
-      2. Find the challenge and verify user is the challenger.
-      3. Verify challenge is PENDING or ACCEPTED.
-      4. If PENDING: refund challenger.
-      5. If ACCEPTED: refund challenger, and refund creator the matched stake safely.
-      6. Mark challenge as CANCELLED.
+      2. Find the challenge and verify the user is the challenger.
+      3. Verify the challenge is still PENDING.
+      4. Refund the challenger and mark the challenge WITHDREW.
     """
     bet = db.query(models.Bet).filter(models.Bet.id == bet_id).first()
     if not bet:

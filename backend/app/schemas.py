@@ -56,6 +56,25 @@ class UserResponse(UserBase):
     model_config = {"from_attributes": True}  # Allows creating from SQLAlchemy model
 
 
+class FollowUser(BaseModel):
+    """Minimal user shape for follower / following lists (no email leak)."""
+    id: int
+    username: str
+
+    model_config = {"from_attributes": True}
+
+
+class FollowCounts(BaseModel):
+    """Follower / following tallies for a profile."""
+    followers: int
+    following: int
+
+
+class FollowStatus(BaseModel):
+    """Whether the current user follows a given user."""
+    following: bool
+
+
 class Token(BaseModel):
     """Response body for POST /auth/login — contains the JWT."""
     access_token: str
@@ -121,7 +140,8 @@ class BetResponse(BetBase):
     proof_comment: Optional[str] = None       # Creator's proof description
     proof_media_url: Optional[str] = None     # URL to uploaded proof file
     proof_submitted_at: Optional[datetime] = None  # When proof was uploaded
-    proof_deadline: Optional[datetime] = None      # End of proof upload window
+    proof_deadline: Optional[datetime] = None      # End of the challenger review window (Level 1)
+    dispute_deadline: Optional[datetime] = None    # End of the public jury window (Level 2)
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -132,7 +152,8 @@ class BetWithUsername(BetResponse):
     """Extended bet response for the public feed — includes creator's username and challenges."""
     username: str
     challenges: List[ChallengeResponse] = []  # All non-rejected challenges
-    proof_votes: List["ProofVoteResponse"] = []  # Votes on proof (if status is proof_under_review)
+    proof_votes: List["ProofVoteResponse"] = []  # Challenger votes on proof (Level 1)
+    jury_votes: List["JuryVoteResponse"] = []    # Neutral juror votes on disputed proof (Level 2)
     starred_by_user_ids: List[int] = []  # User IDs who starred this bet
 
 
@@ -171,7 +192,19 @@ class NotificationResponse(BaseModel):
 # ──────────────────────────────────────────────────────────
 
 class ProofVoteResponse(BaseModel):
-    """Response body for a single proof vote."""
+    """Response body for a single proof vote (Level 1 — challenger)."""
+    id: int
+    bet_id: int
+    user_id: int
+    username: str     # Resolved from User table
+    vote: str         # "cool" or "not_cool"
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class JuryVoteResponse(BaseModel):
+    """Response body for a single jury vote (Level 2 — neutral juror)."""
     id: int
     bet_id: int
     user_id: int

@@ -4,7 +4,6 @@ services/bet_service.py — Business logic for bet operations.
 This is where the core bet logic lives (separated from HTTP concerns in routers).
 Handles: point validation, bet creation, pagination, and bet resolution (point distribution).
 """
-import math
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from app import models, schemas
@@ -12,8 +11,49 @@ from app.models import BetStatus, ChallengeStatus
 from app.exceptions import InsufficientFundsError, BetNotFoundError, InvalidBetAmountError
 from app.logging_config import get_logger
 from app.cache import feed_cache
+from app.services.follow_service import notify_followers
 
 logger = get_logger(__name__)
+
+# Court fee taken from the pot when a dispute is settled by the public jury (Level 2).
+COURT_FEE_PCT = 5  # percent
+
+# Verification windows and thresholds (hours / vote counts).
+PROOF_REVIEW_HOURS = 24   # Level 1: challengers have this long to review proof
+DISPUTE_JURY_HOURS = 24   # Level 2: the public jury has this long to reach a verdict
+JURY_MAJORITY = 3         # First side to reach this many jury votes wins the dispute
+
+
+def apportion(total: int, weights: list[int]) -> list[int]:
+    """
+    Split an integer `total` across buckets in proportion to `weights`,
+    guaranteeing the parts sum back to exactly `total` (no points burned).
+
+    Uses the largest-remainder method: hand out the floor of each share,
+    then give the leftover units to whoever was rounded down the most.
+    """
+    if total <= 0 or not weights:
+        return [0 for _ in weights]
+
+    weight_sum = sum(weights)
+    if weight_sum <= 0:
+        return [0 for _ in weights]
+
+    # Exact (fractional) share for each bucket
+    exact = [total * w / weight_sum for w in weights]
+    floors = [int(x) for x in exact]
+    remainder = total - sum(floors)  # leftover units to distribute
+
+    # Rank buckets by the size of the fractional part they lost
+    order = sorted(range(len(weights)), key=lambda i: exact[i] - floors[i], reverse=True)
+    for i in range(remainder):
+        floors[order[i % len(order)]] += 1
+    return floors
+
+
+def _active_challenges(bet: models.Bet) -> list[models.Challenge]:
+    """Challenges still live on a bet (PENDING = accepted and in play)."""
+    return [c for c in bet.challenges if c.status == ChallengeStatus.PENDING]
 
 
 def validate_points(user: models.User, amount: int) -> bool:
@@ -62,6 +102,10 @@ def create_bet(
         status=models.QueueStatus.PENDING
     )
     db.add(queue_item)
+
+    # Nudge everyone who follows this creator that a new goal is up for grabs
+    notify_followers(db, user.id, f'@{user.username} set a new goal: "{db_bet.title}"', db_bet.id)
+
     db.commit()
     
     db.refresh(user)     # Get updated points balance
@@ -99,6 +143,38 @@ def get_bets_paginated(
     return bets, total
 
 
+def _serialize_bet_with_username(bet: models.Bet) -> schemas.BetWithUsername:
+    """Build a public-feed BetWithUsername (challenges, proof votes, jury votes, stars)."""
+    return schemas.BetWithUsername(
+        id=bet.id, user_id=bet.user_id, title=bet.title, amount=bet.amount,
+        criteria=bet.criteria, status=bet.status, stars=bet.stars, created_at=bet.created_at,
+        updated_at=bet.updated_at, username=bet.user.username,
+        challenges=[
+            schemas.ChallengeResponse(
+                id=c.id, bet_id=c.bet_id, challenger_id=c.challenger_id,
+                challenger_username=c.challenger.username, amount=c.amount,
+                status=c.status, created_at=c.created_at
+            ) for c in bet.challenges
+        ],
+        deadline=bet.deadline, proof_comment=bet.proof_comment,
+        proof_media_url=bet.proof_media_url, proof_submitted_at=bet.proof_submitted_at,
+        proof_deadline=bet.proof_deadline, dispute_deadline=bet.dispute_deadline,
+        proof_votes=[
+            schemas.ProofVoteResponse(
+                id=v.id, bet_id=v.bet_id, user_id=v.user_id,
+                username=v.voter.username, vote=v.vote, created_at=v.created_at,
+            ) for v in bet.proof_votes
+        ],
+        jury_votes=[
+            schemas.JuryVoteResponse(
+                id=v.id, bet_id=v.bet_id, user_id=v.user_id,
+                username=v.voter.username, vote=v.vote, created_at=v.created_at,
+            ) for v in bet.jury_votes
+        ],
+        starred_by_user_ids=[s.user_id for s in bet.starred_by],
+    )
+
+
 def get_public_bets_paginated(
     db: Session,
     page: int,
@@ -108,7 +184,7 @@ def get_public_bets_paginated(
     Get all bets for the public feed, with usernames and non-rejected challenges.
     This is the main data source for the homepage feed.
     Returns: (list_of_bets_with_extra_data, total_count)
-    
+
     Results are cached for 15 seconds to reduce DB load under high traffic.
     """
     cache_key = f"feed_p{page}_l{limit}"
@@ -118,43 +194,168 @@ def get_public_bets_paginated(
 
     offset = (page - 1) * limit
     total = db.query(models.Bet).count()
-    
+
     # Fetch bets ordered by most stars first, then newest
     bets = db.query(models.Bet).order_by(
         models.Bet.stars.desc(),
         models.Bet.created_at.desc()
     ).offset(offset).limit(limit).all()
-    
-    # Manually build response objects with username and filtered challenges
-    bets_with_data = []
-    for bet in bets:
-        # Include all challenges except rejected ones (those are "hidden")
-        challenges = [
-            schemas.ChallengeResponse(
-                id=c.id, bet_id=c.bet_id, challenger_id=c.challenger_id,
-                challenger_username=c.challenger.username, amount=c.amount,
-                status=c.status, created_at=c.created_at
-            ) for c in bet.challenges
-        ]
-        bets_with_data.append(schemas.BetWithUsername(
-            id=bet.id, user_id=bet.user_id, title=bet.title, amount=bet.amount,
-            criteria=bet.criteria, status=bet.status, stars=bet.stars, created_at=bet.created_at,
-            updated_at=bet.updated_at, username=bet.user.username, challenges=challenges,
-            deadline=bet.deadline, proof_comment=bet.proof_comment,
-            proof_media_url=bet.proof_media_url, proof_submitted_at=bet.proof_submitted_at,
-            proof_deadline=bet.proof_deadline,
-            proof_votes=[
-                schemas.ProofVoteResponse(
-                    id=v.id, bet_id=v.bet_id, user_id=v.user_id,
-                    username=v.voter.username, vote=v.vote, created_at=v.created_at,
-                ) for v in bet.proof_votes
-            ],
-            starred_by_user_ids=[s.user_id for s in bet.starred_by],
-        ))
-    
+
+    bets_with_data = [_serialize_bet_with_username(bet) for bet in bets]
+
     result = (bets_with_data, total)
     feed_cache.set(cache_key, result)
     return result
+
+
+def get_disputed_bets_paginated(
+    db: Session,
+    page: int,
+    limit: int
+) -> tuple[list[schemas.BetWithUsername], int]:
+    """Get bets currently under jury review (status DISPUTED), newest dispute first."""
+    offset = (page - 1) * limit
+    query = db.query(models.Bet).filter(models.Bet.status == BetStatus.DISPUTED)
+    total = query.count()
+    bets = query.order_by(models.Bet.proof_submitted_at.desc()).offset(offset).limit(limit).all()
+    return [_serialize_bet_with_username(bet) for bet in bets], total
+
+
+# ──────────────────────────────────────────────────────────
+# Payout helpers — pure point distribution, no auth/status checks.
+# Each mutates points + challenge statuses but does NOT commit.
+# The pot is always fully conserved (nothing is burned).
+# ──────────────────────────────────────────────────────────
+
+def _payout_won(db: Session, bet: models.Bet) -> None:
+    """Creator wins: gets their own stake back plus the whole challenger pool."""
+    challenges = _active_challenges(bet)
+    pool = sum(c.amount for c in challenges)
+    creator = db.query(models.User).filter(models.User.id == bet.user_id).first()
+    creator.points = int(creator.points) + bet.amount + pool
+    for c in challenges:
+        c.status = ChallengeStatus.LOST
+    logger.info("Bet %d WON by creator %s (+%d from pool)", bet.id, creator.username, pool)
+
+
+def _payout_lost(db: Session, bet: models.Bet) -> None:
+    """
+    Creator loses: challengers split the creator's stake in proportion to their
+    own stake (Proportional Risk Model). Largest-remainder split conserves points.
+    """
+    challenges = _active_challenges(bet)
+    total_stake = sum(c.amount for c in challenges)
+    if total_stake <= 0:
+        # No challengers — creator's stake has nowhere to go; it is burned.
+        logger.info("Bet %d LOST but no challengers. %d points burned.", bet.id, bet.amount)
+        return
+
+    shares = apportion(bet.amount, [c.amount for c in challenges])
+    for c, share in zip(challenges, shares):
+        challenger = db.query(models.User).filter(models.User.id == c.challenger_id).first()
+        challenger.points = int(challenger.points) + c.amount + share
+        c.status = ChallengeStatus.WON
+        logger.info("Bet %d: challenger %s won %d (stake %d)", bet.id, challenger.username, share, c.amount)
+
+
+def _payout_cancelled(db: Session, bet: models.Bet) -> None:
+    """Cancelled: everyone gets a full refund."""
+    challenges = _active_challenges(bet)
+    creator = db.query(models.User).filter(models.User.id == bet.user_id).first()
+    creator.points = int(creator.points) + bet.amount
+    for c in challenges:
+        challenger = db.query(models.User).filter(models.User.id == c.challenger_id).first()
+        challenger.points = int(challenger.points) + c.amount
+        c.status = ChallengeStatus.WITHDREW
+    logger.info("Bet %d cancelled, all stakes refunded", bet.id)
+
+
+def _payout_dispute(db: Session, bet: models.Bet, creator_wins: bool, majority_juror_ids: list[int]) -> None:
+    """
+    Settle a disputed bet by the public jury (Level 2).
+
+    The winner pays a 5% court fee out of the pot, split evenly among the jurors
+    who voted with the majority. The remaining pot is distributed as a normal
+    win/loss. Points are fully conserved.
+    """
+    challenges = _active_challenges(bet)
+    pot = bet.amount + sum(c.amount for c in challenges)
+    fee = (pot * COURT_FEE_PCT) // 100
+    if not majority_juror_ids:
+        fee = 0  # no jurors to pay — skip the fee entirely
+
+    # Pay the court fee to the majority jurors (even split, remainder conserved)
+    if fee > 0:
+        juror_shares = apportion(fee, [1] * len(majority_juror_ids))
+        for juror_id, share in zip(majority_juror_ids, juror_shares):
+            juror = db.query(models.User).filter(models.User.id == juror_id).first()
+            if juror:
+                juror.points = int(juror.points) + share
+        logger.info("Bet %d: %d court fee split among %d jurors", bet.id, fee, len(majority_juror_ids))
+
+    winner_pool = pot - fee
+
+    if creator_wins:
+        creator = db.query(models.User).filter(models.User.id == bet.user_id).first()
+        creator.points = int(creator.points) + winner_pool
+        for c in challenges:
+            c.status = ChallengeStatus.LOST
+        logger.info("Bet %d dispute WON by creator (pool %d after fee)", bet.id, winner_pool)
+    else:
+        # Challengers collectively take the pot minus fee, split by their stake.
+        total_stake = sum(c.amount for c in challenges)
+        shares = apportion(winner_pool, [c.amount for c in challenges]) if total_stake > 0 else []
+        for c, share in zip(challenges, shares):
+            challenger = db.query(models.User).filter(models.User.id == c.challenger_id).first()
+            challenger.points = int(challenger.points) + share
+            c.status = ChallengeStatus.WON
+        logger.info("Bet %d dispute LOST by creator (pool %d after fee)", bet.id, winner_pool)
+
+
+def _notify_outcome(db: Session, bet: models.Bet) -> None:
+    """Tell the creator's followers how a resolved bet turned out (WON/LOST only)."""
+    if bet.status not in (BetStatus.WON, BetStatus.LOST):
+        return
+    creator = db.query(models.User).filter(models.User.id == bet.user_id).first()
+    if not creator:
+        return
+    verb = "completed" if bet.status == BetStatus.WON else "failed"
+    notify_followers(db, bet.user_id, f'@{creator.username} {verb} "{bet.title}"', bet.id)
+
+
+def apply_resolution(db: Session, bet: models.Bet, new_status: BetStatus, commit: bool = True) -> models.Bet:
+    """
+    Internal resolver: set the bet's status and run the matching payout.
+
+    Used by automated flows (proof voting, jury voting, deadline fail-safes).
+    Does not enforce ownership — callers are trusted system paths.
+    """
+    bet.status = new_status
+    if new_status == BetStatus.WON:
+        _payout_won(db, bet)
+    elif new_status == BetStatus.LOST:
+        _payout_lost(db, bet)
+    elif new_status == BetStatus.CANCELLED:
+        _payout_cancelled(db, bet)
+
+    _notify_outcome(db, bet)
+
+    if commit:
+        db.commit()
+        db.refresh(bet)
+        feed_cache.invalidate()
+    return bet
+
+
+def resolve_dispute(db: Session, bet: models.Bet, creator_wins: bool, majority_juror_ids: list[int]) -> models.Bet:
+    """Settle a DISPUTED bet via the tribunal and mark it WON/LOST."""
+    bet.status = BetStatus.WON if creator_wins else BetStatus.LOST
+    _payout_dispute(db, bet, creator_wins, majority_juror_ids)
+    _notify_outcome(db, bet)
+    db.commit()
+    db.refresh(bet)
+    feed_cache.invalidate()
+    return bet
 
 
 def resolve_bet(
@@ -164,86 +365,28 @@ def resolve_bet(
     new_status: BetStatus
 ) -> models.Bet:
     """
-    Resolve a bet and distribute points based on outcome.
-    
-    Only the bet CREATOR can resolve their own bet.
-    Only ACTIVE bets can be resolved (prevents double-resolution).
-    
+    Creator-initiated resolution (the PATCH /bets/{id} path and LLM auto-cancel).
+
+    Only the bet CREATOR can resolve their own bet, and only while it is still
+    ACTIVE — once proof is under review (PENDING) or DISPUTED, the outcome is
+    decided by challengers / the jury, not the creator.
+
     Point distribution:
-      WON:       Creator gets their_stake + all_accepted_challenger_stakes
-      LOST:      Each accepted challenger gets 2x their_stake (refund + winnings)
-      CANCELLED: Everyone gets refunded — creator, all non-rejected challengers
+      WON:       Creator gets their stake + the whole challenger pool
+      LOST:      Challengers split the creator's stake proportionally
+      CANCELLED: Everyone gets refunded
     """
-    # Find the bet — must belong to the current user
     bet = db.query(models.Bet).filter(
         models.Bet.id == bet_id,
         models.Bet.user_id == user.id  # Only creator can resolve
     ).first()
-    
+
     if not bet:
         raise BetNotFoundError(bet_id)
-    
-    # Prevent resolving an already-resolved bet
-    if bet.status not in (BetStatus.ACTIVE, BetStatus.PENDING):
-        raise HTTPException(status_code=400, detail="Bet already resolved")
-    
-    bet.status = new_status
-    
-    # Get all active challenges (now just PENDING, since ACCEPTED/REJECTED are gone)
-    active_challenges = [c for c in bet.challenges if c.status == ChallengeStatus.PENDING]
-    total_challenger_stake = sum(c.amount for c in active_challenges)
-    
-    if new_status == BetStatus.WON:
-        # Creator wins: gets back their own stake + takes all challenger stakes
-        user.points = int(user.points) + bet.amount + total_challenger_stake
-        logger.info(f"User {user.username} won bet {bet_id}, won {total_challenger_stake} points (Total: {bet.amount + total_challenger_stake})")
-        
-        # Challengers lost their stakes. Mark their challenges as LOST
-        for challenge in active_challenges:
-            challenge.status = ChallengeStatus.LOST
-        
-    elif new_status == BetStatus.LOST:
-        # Creator loses: Challengers split the Creator's stake proportionally
-        # [POOL UPDATE] Proportional Risk Model
-        # Formula: Payout = ChallengerStake + (ChallengerStake / TotalChallengerStake) * CreatorStake
-        
-        if total_challenger_stake > 0:
-            for challenge in active_challenges:
-                challenger = db.query(models.User).filter(models.User.id == challenge.challenger_id).first()
-                
-                # Calculate share of the creator's stake
-                share = (challenge.amount / total_challenger_stake) * bet.amount
-                payout = challenge.amount + math.floor(share) # Floor to avoid fractional points
-                
-                challenger.points = int(challenger.points) + int(payout)
-                challenge.status = ChallengeStatus.WON
-                logger.info(f"Challenger {challenger.username} won {payout - challenge.amount} points from bet {bet_id} (Stake: {challenge.amount}, Share: {share:.2f})")
-        else:
-            # Edge case: Creator lost but no challengers?
-            # Creator loses stake. It disappears (burned).
-            logger.info(f"Bet {bet_id} lost but no challengers. {bet.amount} points burned.")
-            
-    elif new_status == BetStatus.CANCELLED:
-        # Cancelled: full refund to everyone
-        
-        # Refund the creator's stake
-        user.points = int(user.points) + bet.amount
-        logger.info(f"Refunded {bet.amount} points to creator {user.id}")
-        
-        # Refund all active challengers and mark their challenges as WITHDREW
-        for challenge in active_challenges:
-            challenger = db.query(models.User).filter(models.User.id == challenge.challenger_id).first()
-            challenger.points = int(challenger.points) + challenge.amount
-            challenge.status = ChallengeStatus.WITHDREW
-            logger.info(f"Refunded {challenge.amount} points to challenger {challenge.challenger_id}, challenge marked withdrew")
-        
-        bet.status = BetStatus.CANCELLED
-        logger.info(f"Bet {bet_id} cancelled, all stakes refunded")
-    
-    # Commit all point changes and status updates in one transaction
-    db.commit()
-    db.refresh(bet)
+
+    if bet.status != BetStatus.ACTIVE:
+        raise HTTPException(status_code=400, detail="Only active bets can be resolved by the creator")
+
+    resolved = apply_resolution(db, bet, new_status)
     db.refresh(user)
-    feed_cache.invalidate()  # Resolution changed bet status — clear feed cache
-    
-    return bet
+    return resolved

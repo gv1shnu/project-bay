@@ -19,7 +19,8 @@ from app.database import Base
 class BetStatus(str, enum.Enum):
     """Possible lifecycle states for a bet."""
     ACTIVE = "active"                       # Bet is open — can receive challenges and proof
-    PENDING = "pending"                     # Proof uploaded — waiting for review
+    PENDING = "pending"                     # Proof uploaded — challengers reviewing (Level 1)
+    DISPUTED = "disputed"                   # A challenger flagged the proof — public jury reviewing (Level 2)
     WON = "won"                             # Creator completed their commitment
     LOST = "lost"                           # Creator failed — challengers win
     CANCELLED = "cancelled"                 # Creator cancelled — everyone gets refunded
@@ -87,7 +88,8 @@ class Bet(Base):
     proof_comment = Column(String, nullable=True)                # Creator's proof description
     proof_media_url = Column(String, nullable=True)              # Path to uploaded proof file
     proof_submitted_at = Column(DateTime(timezone=True), nullable=True)  # When proof was uploaded
-    proof_deadline = Column(DateTime(timezone=True), nullable=True)      # Deadline + 1hr for proof upload
+    proof_deadline = Column(DateTime(timezone=True), nullable=True)      # End of the challenger review window (Level 1)
+    dispute_deadline = Column(DateTime(timezone=True), nullable=True)    # End of the public jury window (Level 2)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -95,6 +97,7 @@ class Bet(Base):
     user = relationship("User", back_populates="bets")
     challenges = relationship("Challenge", back_populates="bet")
     proof_votes = relationship("ProofVote", back_populates="bet")
+    jury_votes = relationship("JuryVote", back_populates="bet")
     starred_by = relationship("BetStar", back_populates="bet")
 
 
@@ -128,6 +131,24 @@ class ProofVote(Base):
     voter = relationship("User")
 
 
+class JuryVote(Base):
+    """A neutral user's tribunal vote on disputed proof (Level 2): 'cool' or 'not_cool'.
+
+    Jurors are random users who are NOT the creator and NOT a challenger on the bet.
+    """
+    __tablename__ = "jury_votes"
+    __table_args__ = (UniqueConstraint("bet_id", "user_id", name="uq_jury_vote"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    bet_id = Column(Integer, ForeignKey("bets.id"), nullable=False)       # Which disputed bet is being judged
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)     # The juror (neutral third party)
+    vote = Column(String, nullable=False)                                  # "cool" or "not_cool"
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    bet = relationship("Bet", back_populates="jury_votes")
+    voter = relationship("User")
+
+
 class BetStar(Base):
     """Tracks which users have starred which bets (for toggle behavior)."""
     __tablename__ = "bet_stars"
@@ -140,6 +161,24 @@ class BetStar(Base):
 
     bet = relationship("Bet", back_populates="starred_by")
     user = relationship("User")
+
+
+class Follow(Base):
+    """A one-way follow edge: follower_id follows followed_id.
+
+    Following someone subscribes you to their bet activity (new goals + outcomes)
+    and is what lets you challenge them — you can only challenge people you follow.
+    """
+    __tablename__ = "follows"
+    __table_args__ = (UniqueConstraint("follower_id", "followed_id", name="uq_follow"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    follower_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)  # Who is following
+    followed_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)  # Who is being followed
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    follower = relationship("User", foreign_keys=[follower_id])
+    followed = relationship("User", foreign_keys=[followed_id])
 
 
 class BetValidationQueue(Base):

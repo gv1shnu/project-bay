@@ -27,8 +27,8 @@ export default function BetDetailModal({ bet, onClose, onChallenge, onDismiss, o
     const isOwnBet = user?.username === bet.username
     const isStarred = user && bet.starred_by_user_ids?.includes(user.id)
 
-    const acceptedChallenges = bet.challenges?.filter(c => c.status === 'accepted') || []
-    const allActiveChallenges = bet.challenges?.filter(c => c.status === 'accepted' || c.status === 'pending') || []
+    const acceptedChallenges = bet.challenges?.filter(c => c.status === 'pending') || []
+    const allActiveChallenges = bet.challenges?.filter(c => c.status === 'pending') || []
     const challengerStakes = allActiveChallenges.reduce((sum, c) => sum + c.amount, 0)
     const totalStake = bet.amount + challengerStakes
 

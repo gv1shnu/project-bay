@@ -23,7 +23,7 @@ export default function BetCard({ bet, onCardClick, onStar }: BetCardProps) {
   const isStarred = user && bet.starred_by_user_ids?.includes(user.id)
 
   // Calculate total points at stake (creator + all active challengers)
-  const allActiveChallenges = bet.challenges?.filter(c => c.status === 'accepted' || c.status === 'pending') || []
+  const allActiveChallenges = bet.challenges?.filter(c => c.status === 'pending') || []
   const challengerStakes = allActiveChallenges.reduce((sum, c) => sum + c.amount, 0)
   const totalStake = bet.amount + challengerStakes
 

@@ -12,13 +12,13 @@ Endpoints:
 import os
 import math
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, Request, Query, status, HTTPException, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app import models, schemas
-from app.models import BetStatus
+from app.models import BetStatus, ChallengeStatus
 from app.auth import get_current_user
 from app.database import get_db
 from app.config import settings
@@ -29,6 +29,11 @@ from app.services.bet_service import (
     get_bet_by_id,
     get_bets_paginated,
     get_public_bets_paginated,
+    apply_resolution,
+    resolve_dispute,
+    PROOF_REVIEW_HOURS,
+    DISPUTE_JURY_HOURS,
+    JURY_MAJORITY,
 )
 from app.utils.validation import is_personal
 from app.utils.llm_validator import process_validation_queue
@@ -92,6 +97,26 @@ def get_public_bets(
     return schemas.PaginatedResponse(
         items=bets_with_data, total=total, page=page, limit=limit,
         pages=math.ceil(total / limit) if total > 0 else 1
+    )
+
+
+@router.get("/disputes", response_model=schemas.PaginatedResponse[schemas.BetWithUsername])
+@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+def get_disputes(
+    request: Request,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """Public feed of bets currently under jury review (Level 2 — no auth needed).
+
+    Registered before /{bet_id} so the literal path isn't captured by the int matcher.
+    """
+    from app.services.bet_service import get_disputed_bets_paginated
+    items, total = get_disputed_bets_paginated(db, page, limit)
+    return schemas.PaginatedResponse(
+        items=items, total=total, page=page, limit=limit,
+        pages=math.ceil(total / limit) if total > 0 else 1,
     )
 
 
@@ -184,9 +209,11 @@ async def upload_proof(
     if bet.status != BetStatus.ACTIVE:
         raise HTTPException(status_code=400, detail="Proof can only be uploaded for active bets")
 
-    # Check deadline hasn't passed
+    # Check deadline hasn't passed. Normalize to aware-UTC so a tz-naive value
+    # coming back from the DB never raises on comparison.
     now = datetime.now(timezone.utc)
-    if now > bet.deadline:
+    deadline = bet.deadline if bet.deadline.tzinfo else bet.deadline.replace(tzinfo=timezone.utc)
+    if now > deadline:
         raise HTTPException(status_code=400, detail="Deadline has passed — proof can no longer be uploaded")
 
     # Validate file extension
@@ -213,10 +240,11 @@ async def upload_proof(
     with open(file_path, "wb") as f:
         f.write(contents)
 
-    # Update bet with proof data
+    # Update bet with proof data. Challengers now have a fixed review window (Level 1).
     bet.proof_comment = comment
     bet.proof_media_url = f"/uploads/{unique_name}"
     bet.proof_submitted_at = now
+    bet.proof_deadline = now + timedelta(hours=PROOF_REVIEW_HOURS)
     bet.status = BetStatus.PENDING
 
     # Notify all active challengers (accepted + pending) that proof has been submitted
@@ -255,23 +283,26 @@ def vote_on_proof(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Vote on uploaded proof. Only accepted challengers can vote. Auto-resolves when majority reached."""
+    """
+    Level 1 (Trust Check) — challengers review the creator's proof.
+
+      • Every eligible challenger votes COOL  -> creator WINS immediately.
+      • Any challenger votes NOT COOL         -> dispute raised, escalates to the
+                                                 public jury (status DISPUTED).
+
+    (If challengers simply ignore the proof, the deadline checker awards the
+    creator the win when the review window lapses — funds are never trapped.)
+    """
     bet = get_bet_by_id(db, bet_id)
 
-    # Bet must be in PENDING status
     if bet.status != BetStatus.PENDING:
         raise HTTPException(status_code=400, detail="Bet is not under proof review")
 
-    # Voter must be an active challenger (pending) on this bet
-    active_challenges = [
-        c for c in bet.challenges
-        if c.status == models.ChallengeStatus.PENDING
-    ]
+    active_challenges = [c for c in bet.challenges if c.status == ChallengeStatus.PENDING]
     eligible_voter_ids = {c.challenger_id for c in active_challenges}
     if current_user.id not in eligible_voter_ids:
-        raise HTTPException(status_code=403, detail="Only active challengers (pending) can vote on proof")
+        raise HTTPException(status_code=403, detail="Only active challengers can vote on proof")
 
-    # Check if user already voted
     existing_vote = db.query(models.ProofVote).filter(
         models.ProofVote.bet_id == bet_id,
         models.ProofVote.user_id == current_user.id,
@@ -279,51 +310,103 @@ def vote_on_proof(
     if existing_vote:
         raise HTTPException(status_code=400, detail="You have already voted on this proof")
 
-    # Create the vote
-    proof_vote = models.ProofVote(
-        bet_id=bet_id,
-        user_id=current_user.id,
-        vote=vote,
-    )
+    proof_vote = models.ProofVote(bet_id=bet_id, user_id=current_user.id, vote=vote)
     db.add(proof_vote)
     db.flush()
 
-    # ── Auto-resolution check ──
     total_voters = len(eligible_voter_ids)
+
+    # ── Any NOT COOL vote raises a dispute → Level 2 tribunal ──
+    if vote == "not_cool":
+        bet.status = BetStatus.DISPUTED
+        bet.dispute_deadline = datetime.now(timezone.utc) + timedelta(hours=DISPUTE_JURY_HOURS)
+        # Notify the creator that their proof is contested
+        db.add(models.Notification(
+            user_id=bet.user_id,
+            message=f'@{current_user.username} disputed your proof for "{bet.title}" — sent to the jury',
+            bet_id=bet.id,
+        ))
+        db.commit()
+        feed_cache.invalidate()
+        logger.info("Bet %d DISPUTED by challenger %s -> jury", bet_id, current_user.username)
+        return {
+            "id": proof_vote.id, "bet_id": bet_id, "vote": vote,
+            "cool_count": 0, "total_voters": total_voters,
+            "votes_cast": db.query(models.ProofVote).filter(models.ProofVote.bet_id == bet_id).count(),
+            "bet_status": bet.status.value,
+        }
+
+    # ── COOL vote: creator wins only once every challenger has approved ──
     all_votes = db.query(models.ProofVote).filter(models.ProofVote.bet_id == bet_id).all()
     cool_count = sum(1 for v in all_votes if v.vote == "cool")
     votes_cast = len(all_votes)
 
-    resolved = False
-
-    if cool_count > total_voters / 2:
-        # Majority voted COOL -> creator wins
-        creator = db.query(models.User).filter(models.User.id == bet.user_id).first()
-        from app.services.bet_service import resolve_bet
-        resolve_bet(db, creator, bet_id, BetStatus.WON)
-        logger.info("Bet %d auto-resolved -> WON (COOL %d/%d)", bet_id, cool_count, total_voters)
-        resolved = True
-
-    elif votes_cast >= total_voters:
-        # Everyone voted but COOL <= 50% -> creator loses
-        creator = db.query(models.User).filter(models.User.id == bet.user_id).first()
-        from app.services.bet_service import resolve_bet
-        resolve_bet(db, creator, bet_id, BetStatus.LOST)
-        logger.info("Bet %d auto-resolved -> LOST (COOL %d/%d)", bet_id, cool_count, total_voters)
-        resolved = True
-
-    # Note: resolve_bet commits within itself, so we don't need to commit again unless no resolution happened
-    if not resolved:
-        db.commit()
+    if cool_count >= total_voters:
+        apply_resolution(db, bet, BetStatus.WON)
+        logger.info("Bet %d -> WON (all %d challengers approved)", bet_id, total_voters)
     else:
-        feed_cache.invalidate()
+        db.commit()
 
     return {
-        "id": proof_vote.id,
-        "bet_id": bet_id,
-        "vote": vote,
-        "cool_count": cool_count,
-        "total_voters": total_voters,
-        "votes_cast": votes_cast,
-        "bet_status": bet.status.value,
+        "id": proof_vote.id, "bet_id": bet_id, "vote": vote,
+        "cool_count": cool_count, "total_voters": total_voters,
+        "votes_cast": votes_cast, "bet_status": bet.status.value,
+    }
+
+
+@router.post("/{bet_id}/jury-vote")
+@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+def vote_on_dispute(
+    request: Request,
+    bet_id: int,
+    vote: str = Query(..., pattern="^(cool|not_cool)$"),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Level 2 (The Tribunal) — a neutral juror votes on disputed proof.
+
+    Jurors must be neither the creator nor a challenger. The first side to reach
+    a 3-vote majority wins. The winner pays a 5% court fee out of the pot, split
+    among the jurors who voted with the majority.
+    """
+    bet = get_bet_by_id(db, bet_id)
+
+    if bet.status != BetStatus.DISPUTED:
+        raise HTTPException(status_code=400, detail="This bet is not under jury review")
+
+    # Neutrality checks — can't judge your own bet or one you have a stake in
+    if bet.user_id == current_user.id:
+        raise HTTPException(status_code=403, detail="You cannot judge your own bet")
+    challenger_ids = {c.challenger_id for c in bet.challenges if c.status == ChallengeStatus.PENDING}
+    if current_user.id in challenger_ids:
+        raise HTTPException(status_code=403, detail="Challengers cannot serve on the jury for their own bet")
+
+    existing = db.query(models.JuryVote).filter(
+        models.JuryVote.bet_id == bet_id,
+        models.JuryVote.user_id == current_user.id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="You have already voted as a juror on this bet")
+
+    db.add(models.JuryVote(bet_id=bet_id, user_id=current_user.id, vote=vote))
+    db.flush()
+
+    jury_votes = db.query(models.JuryVote).filter(models.JuryVote.bet_id == bet_id).all()
+    cool = [v for v in jury_votes if v.vote == "cool"]
+    not_cool = [v for v in jury_votes if v.vote == "not_cool"]
+
+    if len(cool) >= JURY_MAJORITY:
+        resolve_dispute(db, bet, creator_wins=True, majority_juror_ids=[v.user_id for v in cool])
+        logger.info("Bet %d jury verdict -> WON (creator)", bet_id)
+    elif len(not_cool) >= JURY_MAJORITY:
+        resolve_dispute(db, bet, creator_wins=False, majority_juror_ids=[v.user_id for v in not_cool])
+        logger.info("Bet %d jury verdict -> LOST (challengers)", bet_id)
+    else:
+        db.commit()
+
+    return {
+        "id": bet_id, "vote": vote,
+        "cool_count": len(cool), "not_cool_count": len(not_cool),
+        "majority_needed": JURY_MAJORITY, "bet_status": bet.status.value,
     }

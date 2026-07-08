@@ -120,8 +120,9 @@ export default function ProofReviewPage() {
                     <div className="flex items-center gap-2 mb-3">
                         <span className="text-xs font-bold px-2 py-1 rounded-full bg-yellow-100 text-yellow-800">
                             {bet.status === 'pending' ? '🔍 Under Review' :
-                                bet.status === 'won' ? '✅ Won' :
-                                    bet.status === 'lost' ? '❌ Lost' : bet.status}
+                                bet.status === 'disputed' ? '⚖️ Disputed' :
+                                    bet.status === 'won' ? '✅ Won' :
+                                        bet.status === 'lost' ? '❌ Lost' : bet.status}
                         </span>
                         <span className="text-xs text-gray-400">by @{bet.username}</span>
                     </div>
@@ -169,6 +170,16 @@ export default function ProofReviewPage() {
                         <p className="text-gray-400 text-center py-8">No proof uploaded yet.</p>
                     )}
                 </div>
+
+                {/* Disputed — proof was flagged and sent to the public jury */}
+                {bet.status === 'disputed' && (
+                    <div className="bg-purple-50 border-2 border-purple-200 rounded-2xl p-6 mb-6 text-center">
+                        <p className="text-purple-800 font-semibold mb-2">⚖️ This proof was disputed and sent to the Tribunal.</p>
+                        <button onClick={() => navigate('/disputes')} className="text-purple-700 underline font-semibold">
+                            View it in the Tribunal
+                        </button>
+                    </div>
+                )}
 
                 {/* Vote section — only for challengers who haven't voted yet */}
                 {isChallenger && bet.status === 'pending' && !hasVoted && (
@@ -244,7 +255,8 @@ export default function ProofReviewPage() {
                         }`}>
                         {voteResult.bet_status === 'won' && '🎉 Bet resolved — Creator wins!'}
                         {voteResult.bet_status === 'lost' && '❌ Bet resolved — Creator loses!'}
-                        {voteResult.bet_status === 'pending' && `Vote recorded! (${voteResult.cool_count}/${voteResult.total_voters} COOL so far)`}
+                        {voteResult.bet_status === 'disputed' && '⚖️ Proof disputed — sent to the Tribunal for a jury verdict.'}
+                        {voteResult.bet_status === 'pending' && `Vote recorded! (${voteResult.cool_count}/${voteResult.total_voters} approvals so far)`}
                     </div>
                 )}
 

@@ -24,13 +24,22 @@ class AgentState(TypedDict):
     raw_response: str
     error: str
 
-# Instantiate the LLM using Groq
-# We require JSON mode to ensure structured output
-llm = ChatGroq(
-    api_key=settings.GROQ_API_KEY,
-    model_name="llama-3.3-70b-versatile",
-    temperature=0.0
-).bind(response_format={"type": "json_object"})
+# Lazily instantiate the Groq LLM so merely importing this module (and therefore
+# the whole app) doesn't require a live Groq client — only the first validation does.
+# We require JSON mode to ensure structured output.
+_llm = None
+
+
+def get_llm():
+    """Build (once) and return the JSON-mode Groq chat model."""
+    global _llm
+    if _llm is None:
+        _llm = ChatGroq(
+            api_key=settings.GROQ_API_KEY,
+            model_name="llama-3.3-70b-versatile",
+            temperature=0.0,
+        ).bind(response_format={"type": "json_object"})
+    return _llm
 
 
 SYS_PROMPT = """You are an automated moderator for a betting platform. 
@@ -59,7 +68,7 @@ def evaluate_bet_node(state: AgentState) -> dict:
     ]
     
     try:
-        response = llm.invoke(messages)
+        response = get_llm().invoke(messages)
         content = response.content
         
         # Parse JSON

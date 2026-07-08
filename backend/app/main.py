@@ -17,6 +17,7 @@ from app.routers import auth
 from app.routers.bets import router as bets_router
 from app.routers.admin import router as admin_router
 from app.routers.notifications import router as notifications_router
+from app.routers.follows import router as follows_router
 from app.config import settings
 from app.logging_config import setup_logging, get_logger
 from app.exceptions import BettingAPIException, betting_api_exception_handler
@@ -33,6 +34,12 @@ async def lifespan(app: FastAPI):
     # Auto-create all tables defined in models.py (safe to call repeatedly)
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables created")
+
+    # Populate demo data on a fresh database so the app looks alive on first run.
+    if settings.SEED_DEMO_DATA:
+        from app.seed import seed_if_empty
+        if seed_if_empty():
+            logger.info("Demo data seeded (empty database detected)")
 
     logger.info("Application startup complete")
 
@@ -87,6 +94,7 @@ app.include_router(auth.router)
 app.include_router(bets_router)
 app.include_router(admin_router)
 app.include_router(notifications_router)
+app.include_router(follows_router)
 
 # Serve uploaded proof files as static assets at /uploads/*
 UPLOADS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")

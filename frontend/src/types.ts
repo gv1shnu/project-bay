@@ -15,17 +15,19 @@ export interface Bet {
   title: string;           // The personal commitment (e.g., "I will run 5km")
   amount: number;          // Creator's total matched stake (grows when challenges are accepted)
   criteria: string;        // How success will be measured
-  status: string;          //   'active' | 'pending' | 'won' | 'lost' | 'cancelled';
+  status: string;          //   'active' | 'pending' | 'disputed' | 'won' | 'lost' | 'cancelled';
   stars: number;           // Number of stars (likes)
   deadline: string;        // ISO date string for the bet deadline
   proof_comment?: string;       // Creator's proof description
   proof_media_url?: string;     // URL to uploaded proof file
   proof_submitted_at?: string;  // ISO date string
-  proof_deadline?: string;      // ISO date string — end of proof upload window
+  proof_deadline?: string;      // ISO date string — end of the challenger review window (Level 1)
+  dispute_deadline?: string;    // ISO date string — end of the public jury window (Level 2)
   created_at: string;      // ISO date string
   username?: string;       // Creator's username (only present in public feed responses)
   challenges?: Challenge[]; // Challenges against this bet (only in public feed)
-  proof_votes?: ProofVote[]; // Votes on proof (only in public feed when proof_under_review)
+  proof_votes?: ProofVote[]; // Challenger votes on proof (Level 1)
+  jury_votes?: JuryVote[];   // Neutral juror votes on disputed proof (Level 2)
   starred_by_user_ids?: number[]; // User IDs who starred this bet
 }
 
@@ -54,12 +56,22 @@ export interface Notification {
   created_at: string;
 }
 
-/** A challenger's vote on uploaded proof */
+/** A challenger's vote on uploaded proof (Level 1) */
 export interface ProofVote {
   id: number;
   bet_id: number;
   user_id: number;
   username: string;  // Voter's username
+  vote: string;      // "cool" or "not_cool"
+  created_at: string;
+}
+
+/** A neutral juror's vote on disputed proof (Level 2 tribunal) */
+export interface JuryVote {
+  id: number;
+  bet_id: number;
+  user_id: number;
+  username: string;  // Juror's username
   vote: string;      // "cool" or "not_cool"
   created_at: string;
 }

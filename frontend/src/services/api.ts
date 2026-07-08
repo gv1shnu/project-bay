@@ -145,6 +145,41 @@ class ApiService {
 
 
   // ════════════════════════════════════════════════════════
+  // Follow Endpoints
+  // ════════════════════════════════════════════════════════
+
+  /** Follow a user — lets you challenge them and see their activity. */
+  async followUser(username: string): Promise<ApiResponse<{ following: boolean }>> {
+    return this.request<{ following: boolean }>(`/follows/${username}`, { method: 'POST' });
+  }
+
+  /** Unfollow a user. */
+  async unfollowUser(username: string): Promise<ApiResponse<{ following: boolean }>> {
+    return this.request<{ following: boolean }>(`/follows/${username}`, { method: 'DELETE' });
+  }
+
+  /** Public follower / following counts for a user. */
+  async getFollowCounts(username: string): Promise<ApiResponse<{ followers: number; following: number }>> {
+    return this.request<{ followers: number; following: number }>(`/follows/${username}/counts`);
+  }
+
+  /** Whether the current user follows the given user (requires auth). */
+  async getFollowStatus(username: string): Promise<ApiResponse<{ following: boolean }>> {
+    return this.request<{ following: boolean }>(`/follows/${username}/status`);
+  }
+
+  /** Users the current user follows. */
+  async getFollowing(): Promise<ApiResponse<{ id: number; username: string }[]>> {
+    return this.request<{ id: number; username: string }[]>('/follows/me/following');
+  }
+
+  /** Users who follow the current user. */
+  async getFollowers(): Promise<ApiResponse<{ id: number; username: string }[]>> {
+    return this.request<{ id: number; username: string }[]>('/follows/me/followers');
+  }
+
+
+  // ════════════════════════════════════════════════════════
   // Bet Endpoints
   // ════════════════════════════════════════════════════════
 
@@ -240,23 +275,19 @@ class ApiService {
   }
 
 
+  /** Fetch bets currently under jury review (Level 2 dispute feed). */
+  async getDisputes(): Promise<ApiResponse<Bet[]>> {
+    const response = await this.request<{ items: Bet[] }>('/bets/disputes?limit=100');
+    if (response.data) {
+      return { data: response.data.items };
+    }
+    return { error: response.error };
+  }
+
+
   // ════════════════════════════════════════════════════════
   // Challenge Endpoints
   // ════════════════════════════════════════════════════════
-
-  /** Accept a challenge on your bet (matches the challenger's stake). */
-  async acceptChallenge(betId: number, challengeId: number): Promise<ApiResponse<Challenge>> {
-    return this.request<Challenge>(`/bets/${betId}/challenges/${challengeId}/accept`, {
-      method: 'POST',
-    });
-  }
-
-  /** Reject a challenge on your bet (refunds the challenger). */
-  async rejectChallenge(betId: number, challengeId: number): Promise<ApiResponse<Challenge>> {
-    return this.request<Challenge>(`/bets/${betId}/challenges/${challengeId}/reject`, {
-      method: 'POST',
-    });
-  }
 
   /** Withdraw a challenge you made (refunds stakes). */
   async withdrawChallenge(betId: number, challengeId: number): Promise<ApiResponse<Challenge>> {
@@ -325,12 +356,22 @@ class ApiService {
   // Proof Vote Endpoints
   // ════════════════════════════════════════════════════════
 
-  /** Vote on proof: 'cool' (approve) or 'not_cool' (reject). */
+  /** Level 1 — challenger votes on proof: 'cool' (approve) or 'not_cool' (dispute). */
   async voteOnProof(betId: number, vote: 'cool' | 'not_cool'): Promise<ApiResponse<{
     id: number; bet_id: number; vote: string;
     cool_count: number; total_voters: number; votes_cast: number; bet_status: string;
   }>> {
     return this.request(`/bets/${betId}/vote?vote=${vote}`, {
+      method: 'POST',
+    });
+  }
+
+  /** Level 2 — neutral juror votes on a disputed bet. First side to 3 votes wins. */
+  async voteOnDispute(betId: number, vote: 'cool' | 'not_cool'): Promise<ApiResponse<{
+    id: number; vote: string;
+    cool_count: number; not_cool_count: number; majority_needed: number; bet_status: string;
+  }>> {
+    return this.request(`/bets/${betId}/jury-vote?vote=${vote}`, {
       method: 'POST',
     });
   }
