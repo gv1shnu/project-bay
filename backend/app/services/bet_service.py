@@ -274,15 +274,21 @@ def _payout_dispute(db: Session, bet: models.Bet, creator_wins: bool, majority_j
     """
     Settle a disputed bet by the public jury (Level 2).
 
-    The winner pays a 5% court fee out of the pot, split evenly among the jurors
-    who voted with the majority. The remaining pot is distributed as a normal
+    The winner pays a 5% court fee out of the pot, split among the jurors who
+    voted with the majority. The remaining pot is distributed as a normal
     win/loss. Points are fully conserved.
+
+    The fee is floored at 1 point whenever there are jurors to pay: 5% of a
+    small integer pot (e.g. 5% of 8 = 0.4) would otherwise truncate to 0 and
+    leave jurors unpaid, silently breaking the reward the UI promises. It is
+    also capped at the pot so the winner's pool can never go negative.
     """
     challenges = _active_challenges(bet)
     pot = bet.amount + sum(c.amount for c in challenges)
-    fee = (pot * COURT_FEE_PCT) // 100
-    if not majority_juror_ids:
-        fee = 0  # no jurors to pay — skip the fee entirely
+    if majority_juror_ids and pot > 0:
+        fee = min(pot, max(1, (pot * COURT_FEE_PCT) // 100))
+    else:
+        fee = 0  # no jurors to pay (or empty pot) — skip the fee entirely
 
     # Pay the court fee to the majority jurors (even split, remainder conserved)
     if fee > 0:
@@ -386,6 +392,19 @@ def resolve_bet(
 
     if bet.status != BetStatus.ACTIVE:
         raise HTTPException(status_code=400, detail="Only active bets can be resolved by the creator")
+
+    # A contested bet cannot be won/lost by creator fiat — that would let the
+    # creator sweep the pot without the challengers ever reviewing proof. Once
+    # anyone has staked against the bet, the outcome must go through the proof
+    # review / jury flow. The creator may still CANCEL (which refunds everyone).
+    has_active_challengers = any(
+        c.status == ChallengeStatus.PENDING for c in bet.challenges
+    )
+    if new_status in (BetStatus.WON, BetStatus.LOST) and has_active_challengers:
+        raise HTTPException(
+            status_code=403,
+            detail="A challenged bet can't be resolved by the creator — upload proof for the challengers to review.",
+        )
 
     resolved = apply_resolution(db, bet, new_status)
     db.refresh(user)

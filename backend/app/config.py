@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     # --- Admin ---
     ADMIN_PASSPHRASE: str                     # Passphrase required to access /admin endpoints
 
+    # --- CORS ---
+    # Comma-separated list of allowed frontend origins. Defaults to local dev
+    # ports; set CORS_ORIGINS to your real frontend URL(s) in production.
+    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
     # --- Logging ---
     LOG_LEVEL: str = "INFO"                   # DEBUG, INFO, WARNING, ERROR, CRITICAL
     LOG_FORMAT: str = "development"           # "development" = human-readable, "production" = JSON

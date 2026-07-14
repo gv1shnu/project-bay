@@ -42,7 +42,7 @@ def is_personal(text: str) -> bool:
 
     # Fast reject: no first-person pronouns at all — can't be personal
     lowered = text_clean.lower()
-    if not any(w in lowered for w in ("i", "we", "my", "me")):
+    if not re.search(r"\b(?:i|we|my|me)\b", lowered):
         return False
 
     # Check for commitment pattern (first-person + commitment words)

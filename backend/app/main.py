@@ -78,12 +78,7 @@ app.add_exception_handler(BettingAPIException, betting_api_exception_handler)
 # Update these origins when deploying to production
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",    # Vite default dev port
-        "http://localhost:3000",    # Alternate dev port
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=settings.cors_origins_list,  # from CORS_ORIGINS env (defaults to local dev ports)
     allow_credentials=True,  # Allow cookies/auth headers
     allow_methods=["*"],     # Allow all HTTP methods
     allow_headers=["*"],     # Allow all headers

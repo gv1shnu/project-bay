@@ -108,3 +108,17 @@ def test_dispute_challengers_win(db):
     bs.resolve_dispute(db, bet, creator_wins=False, majority_juror_ids=[j1.id, j2.id, j3.id])
     assert _total(db) == before + pot
     assert db.get(models.User, chs[0].id).points == pot - fee
+
+
+def test_dispute_small_pot_still_pays_jurors(db):
+    """A pot too small for 5% to reach 1 point must still pay the jurors a
+    floored 1-point court fee — not silently round the reward away to 0."""
+    creator, bet, chs = _bet_with_challengers(db, 0, 3, [(0, 5)], status=BetStatus.DISPUTED)
+    j1, j2, j3 = _user(db, "j1", 0), _user(db, "j2", 0), _user(db, "j3", 0)
+    before, pot = _total(db), 8
+    assert pot * bs.COURT_FEE_PCT // 100 == 0  # raw 5% floors to nothing here
+    bs.resolve_dispute(db, bet, creator_wins=False, majority_juror_ids=[j1.id, j2.id, j3.id])
+    assert _total(db) == before + pot  # still fully conserved
+    juror_total = sum(db.get(models.User, j).points for j in (j1.id, j2.id, j3.id))
+    assert juror_total == 1  # the promised court fee actually materialized
+    assert db.get(models.User, chs[0].id).points == pot - 1  # challenger takes pot minus fee
