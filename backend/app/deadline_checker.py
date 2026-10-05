@@ -9,6 +9,9 @@ Runs every 60 seconds and handles three time-based transitions:
                     (Level 3 fail-safe: "innocent until proven guilty").
 
 The last two guarantee funds are never trapped in a stalled review.
+
+When SEED_DEMO_DATA is on, each pass also rebuilds the open demo bets once they
+have all expired, so a long-running demo deployment never shows an empty feed.
 """
 import threading
 from datetime import datetime, timezone
@@ -19,6 +22,7 @@ from app.models import BetStatus
 from app.services.bet_service import apply_resolution
 from app.logging_config import get_logger
 from app.cache import feed_cache
+from app.config import settings
 
 logger = get_logger(__name__)
 
@@ -54,6 +58,9 @@ class DeadlineChecker:
                 self._check_deadlines()
             except Exception as e:
                 logger.error("Deadline checker error: %s", e)
+            if settings.SEED_DEMO_DATA:
+                from app.seed import refresh_demo_bets_if_stale
+                refresh_demo_bets_if_stale()
             self._stop_event.wait(CHECK_INTERVAL)
 
     def _check_deadlines(self):
