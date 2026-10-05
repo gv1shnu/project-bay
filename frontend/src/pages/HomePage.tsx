@@ -80,12 +80,12 @@ export default function HomePage() {
 
   /**
    * Client-side search filter using useMemo for performance.
-   * Only shows active bets. Filters by title, criteria, or username.
+   * Only shows open bets (active, pending proof review, disputed). Filters by title, criteria, or username.
    * Re-computes only when bets or searchQuery changes.
    */
   const filteredBets = useMemo(() => {
     let result = bets.filter(bet =>
-      bet.status === 'active' || bet.status === 'proof_under_review'
+      ['active', 'pending', 'disputed'].includes(bet.status)
     )
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
