@@ -11,7 +11,9 @@ Run manually:
     python -m app.seed --reset    # DROP all tables, recreate, then seed
 
 Or let it run automatically: when SEED_DEMO_DATA=true (default), the app seeds
-an empty database on startup.
+an empty database on startup, and the deadline checker rebuilds the open demo
+bets (active / under review / disputed) whenever they have all expired, so the
+feed never goes empty on a long-running demo deployment.
 
 Every demo user shares the password:  demo1234
 """
@@ -20,17 +22,23 @@ import os
 import sys
 from datetime import datetime, timezone, timedelta
 
+from sqlalchemy import text
+
 from app.database import SessionLocal, Base, engine
 from app import models
 from app.models import BetStatus, ChallengeStatus
 from app.auth import get_password_hash
 from app.services.bet_service import apply_resolution
 from app.logging_config import get_logger
+from app.cache import feed_cache
 
 logger = get_logger(__name__)
 
 DEMO_PASSWORD = "demo1234"
 START_POINTS = 20  # demo users start richer than the live default (10) for fuller activity
+DEMO_USERNAMES = ["alex", "bella", "chris", "dana", "evan", "fiona", "gina", "hugo"]
+OPEN_STATUSES = (BetStatus.ACTIVE, BetStatus.PENDING, BetStatus.DISPUTED)
+_REFRESH_LOCK_ID = 7_314_002  # Postgres advisory lock so only one worker refreshes at a time
 
 # A tiny valid 1x1 PNG, written to /uploads so proof images actually render.
 _PNG_1x1 = base64.b64decode(
@@ -52,21 +60,21 @@ def _write_demo_proof() -> str:
     return "/uploads/demo_proof.png"
 
 
-def _build(db):
-    """Insert the whole demo world in one session."""
-    proof_url = _write_demo_proof()
-
-    # ── Users ────────────────────────────────────────────────────────────
-    names = ["alex", "bella", "chris", "dana", "evan", "fiona", "gina", "hugo"]
+def _ensure_demo_users(db) -> dict:
+    """Create any missing demo users (and the follow graph); return {username: User}."""
+    existing = {u.username: u for u in
+                db.query(models.User).filter(models.User.username.in_(DEMO_USERNAMES))}
     users = {}
-    for n in names:
-        u = models.User(
-            username=n,
-            email=f"{n}@gmail.com",
-            hashed_password=get_password_hash(DEMO_PASSWORD),
-            points=START_POINTS,
-        )
-        db.add(u)
+    for n in DEMO_USERNAMES:
+        u = existing.get(n)
+        if u is None:
+            u = models.User(
+                username=n,
+                email=f"{n}@gmail.com",
+                hashed_password=get_password_hash(DEMO_PASSWORD),
+                points=START_POINTS,
+            )
+            db.add(u)
         users[n] = u
     db.flush()
 
@@ -80,8 +88,25 @@ def _build(db):
         ("chris", "dana"),
     ]
     for a, b in edges:
-        db.add(models.Follow(follower_id=users[a].id, followed_id=users[b].id))
+        exists = db.query(models.Follow).filter_by(
+            follower_id=users[a].id, followed_id=users[b].id).first()
+        if not exists:
+            db.add(models.Follow(follower_id=users[a].id, followed_id=users[b].id))
     db.flush()
+    return users
+
+
+def _build(db):
+    """Insert the whole demo world in one session."""
+    users = _ensure_demo_users(db)
+    _build_bets(db, users, include_resolved=True)
+    db.commit()
+    logger.info("Seed complete: %d users, 7 bets across all states.", len(users))
+
+
+def _build_bets(db, users, include_resolved):
+    """Add the demo bets. Open ones always; resolved ones only when include_resolved."""
+    proof_url = _write_demo_proof()
 
     # ── Helpers ──────────────────────────────────────────────────────────
     def make_bet(creator, title, criteria, stake, deadline_days, created_hours_ago,
@@ -147,6 +172,17 @@ def _build(db):
     db.add(models.JuryVote(bet_id=b4.id, user_id=U["alex"].id, vote="cool"))       # neutral juror so far
     star(b4, "dana", "evan")
 
+    # A couple of standalone notifications for flavor
+    db.add(models.Notification(user_id=U["chris"].id,
+                               message='@evan uploaded proof for "I will do 100 pushups today"',
+                               bet_id=b3.id))
+    db.add(models.Notification(user_id=U["hugo"].id,
+                               message='@gina disputed the proof for "I will wake up at 5am for 5 days" — sent to the jury',
+                               bet_id=b4.id))
+
+    if not include_resolved:
+        return
+
     # 5) WON — resolved, creator took the pot
     b5 = make_bet(U["alex"], "I will meditate 10 minutes", "Calm app session log", 2, -1, 60)
     add_challenge(b5, U["bella"], 2)
@@ -166,17 +202,6 @@ def _build(db):
     add_challenge(b7, U["chris"], 2)
     apply_resolution(db, b7, BetStatus.CANCELLED, commit=False)
 
-    # A couple of standalone notifications for flavor
-    db.add(models.Notification(user_id=U["chris"].id,
-                               message='@evan uploaded proof for "I will do 100 pushups today"',
-                               bet_id=b3.id))
-    db.add(models.Notification(user_id=U["hugo"].id,
-                               message='@gina disputed the proof for "I will wake up at 5am for 5 days" — sent to the jury',
-                               bet_id=b4.id))
-
-    db.commit()
-    logger.info("Seed complete: %d users, 7 bets across all states.", len(users))
-
 
 def seed_if_empty() -> bool:
     """Seed only when there are no users yet. Returns True if it seeded."""
@@ -192,6 +217,53 @@ def seed_if_empty() -> bool:
         return False
     finally:
         db.close()
+
+
+def refresh_demo_bets_if_stale(db=None) -> bool:
+    """Rebuild the open demo bets once every one of them has expired or resolved.
+
+    Only acts on a database that already holds the demo users (i.e. it was seeded
+    at some point) — a database with only real users is never touched. Existing
+    bets, including resolved demo history, are left as they are. Returns True if
+    it added bets.
+    """
+    own_session = db is None
+    db = db or SessionLocal()
+    try:
+        if db.get_bind().dialect.name == "postgresql":
+            # Several gunicorn workers each run a deadline checker; let one win.
+            locked = db.execute(text("SELECT pg_try_advisory_xact_lock(:id)"),
+                                {"id": _REFRESH_LOCK_ID}).scalar()
+            if not locked:
+                return False
+
+        demo_ids = [uid for (uid,) in db.query(models.User.id)
+                    .filter(models.User.username.in_(DEMO_USERNAMES))]
+        if not demo_ids:
+            return False
+        has_open = db.query(models.Bet.id).filter(
+            models.Bet.user_id.in_(demo_ids),
+            models.Bet.status.in_(OPEN_STATUSES),
+        ).first()
+        if has_open:
+            return False
+
+        users = _ensure_demo_users(db)
+        # Stakes are deducted without a balance check; keep demo wallets above water.
+        for u in users.values():
+            u.points = max(int(u.points or 0), START_POINTS)
+        _build_bets(db, users, include_resolved=False)
+        db.commit()
+        feed_cache.invalidate()
+        logger.info("Demo bets refreshed (all previous open demo bets had expired)")
+        return True
+    except Exception as e:  # never let a refresh take down the caller
+        db.rollback()
+        logger.warning("Demo bet refresh skipped: %s", e)
+        return False
+    finally:
+        if own_session:
+            db.close()
 
 
 def main(argv=None):
